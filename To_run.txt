@@ -1,0 +1,7 @@
+run backend by 
+cd server
+node index.js
+
+frontend 
+cd client
+npm run dev
