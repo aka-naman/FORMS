@@ -55,9 +55,24 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
+const os = require('os');
+const getLocalIP = () => {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '0.0.0.0';
+};
+
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 Form Dashboard API running at http://0.0.0.0:${PORT}`);
-    console.log(`   Local: http://localhost:${PORT}`);
+    const localIP = getLocalIP();
+    console.log(`\n🚀 Form Dashboard API running at:`);
+    console.log(`   Local:   http://localhost:${PORT}`);
+    console.log(`   Network: http://${localIP}:${PORT}`);
 });
 
 module.exports = app;
