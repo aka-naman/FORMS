@@ -13,7 +13,9 @@ export default function AdminDashboardPage() {
     const [userForms, setUserForms] = useState([]);
     const [userFormsLoading, setUserFormsLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
-    const [passwordModal, setPasswordModal] = useState({ open: false, userId: null, username: '', newPassword: '' });
+    const [profileModal, setProfileModal] = useState({ open: false, userId: null, username: '', originalUsername: '', newPassword: '' });
+    const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+    const [newUser, setNewUser] = useState({ username: '', password: '' });
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
@@ -51,20 +53,39 @@ export default function AdminDashboardPage() {
         }
     };
 
-    const handleChangePassword = async (e) => {
+    const handleProfileUpdate = async (e) => {
         e.preventDefault();
-        if (!passwordModal.newPassword || passwordModal.newPassword.length < 6) {
-            alert('Password must be at least 6 characters');
+        
+        const updates = {};
+        if (profileModal.username !== profileModal.originalUsername) {
+            if (!profileModal.username.trim() || profileModal.username.length < 3) {
+                alert('Username must be at least 3 characters');
+                return;
+            }
+            updates.username = profileModal.username.trim();
+        }
+        
+        if (profileModal.newPassword) {
+            if (profileModal.newPassword.length < 6) {
+                alert('Password must be at least 6 characters');
+                return;
+            }
+            updates.password = profileModal.newPassword;
+        }
+
+        if (Object.keys(updates).length === 0) {
+            setProfileModal({ open: false, userId: null, username: '', originalUsername: '', newPassword: '' });
             return;
         }
 
         try {
             setActionLoading(true);
-            await api.put(`/admin/users/${passwordModal.userId}/password`, { newPassword: passwordModal.newPassword });
-            setPasswordModal({ open: false, userId: null, username: '', newPassword: '' });
-            alert(`Password for ${passwordModal.username} updated successfully.`);
+            const res = await api.put(`/admin/users/${profileModal.userId}/profile`, updates);
+            setProfileModal({ open: false, userId: null, username: '', originalUsername: '', newPassword: '' });
+            alert(res.data.message);
+            fetchStats();
         } catch (err) {
-            alert(err.response?.data?.error || 'Failed to update password');
+            alert(err.response?.data?.error || 'Failed to update profile');
         } finally {
             setActionLoading(false);
         }
@@ -106,6 +127,27 @@ export default function AdminDashboardPage() {
         setUserForms([]);
     };
 
+    const handleCreateUser = async (e) => {
+        e.preventDefault();
+        if (!newUser.username || newUser.password.length < 6) {
+            alert('Username and password (min. 6 chars) are required');
+            return;
+        }
+
+        try {
+            setActionLoading(true);
+            await api.post('/auth/register', newUser);
+            setShowCreateUserModal(false);
+            setNewUser({ username: '', password: '' });
+            fetchStats();
+            alert(`User ${newUser.username} created successfully.`);
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to create user');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="loading-screen">
@@ -139,6 +181,9 @@ export default function AdminDashboardPage() {
                     <span className="user-badge">Admin: {user?.username}</span>
                 </div>
                 <div className="header-right">
+                    <button className="btn btn-primary" onClick={() => setShowCreateUserModal(true)}>
+                        + Create User
+                    </button>
                     <button className="btn btn-secondary" onClick={() => navigate('/')} title="Back to Dashboard">
                         ← Dashboard
                     </button>
@@ -228,10 +273,16 @@ export default function AdminDashboardPage() {
                                             >📂</button>
                                             <button
                                                 className="btn btn-sm btn-accent"
-                                                onClick={() => setPasswordModal({ open: true, userId: userItem.id, username: userItem.username, newPassword: '' })}
+                                                onClick={() => setProfileModal({ 
+                                                    open: true, 
+                                                    userId: userItem.id, 
+                                                    username: userItem.username, 
+                                                    originalUsername: userItem.username,
+                                                    newPassword: '' 
+                                                })}
                                                 disabled={actionLoading}
-                                                title="Reset Password"
-                                            >🔑</button>
+                                                title="Edit Profile"
+                                            >👤</button>
                                             <button
                                                 className="btn btn-sm btn-secondary"
                                                 onClick={() => handleChangeRole(userItem.id, userItem.role, userItem.username)}
@@ -283,26 +334,73 @@ export default function AdminDashboardPage() {
                 </div>
             )}
 
-            {passwordModal.open && (
-                <div className="modal-overlay" onClick={() => setPasswordModal({ ...passwordModal, open: false })}>
+            {profileModal.open && (
+                <div className="modal-overlay" onClick={() => setProfileModal({ ...profileModal, open: false })}>
                     <div className="modal glass-card" onClick={e => e.stopPropagation()}>
-                        <h2>Reset Password for {passwordModal.username}</h2>
-                        <form onSubmit={handleChangePassword}>
+                        <h2>Edit Profile: {profileModal.originalUsername}</h2>
+                        <form onSubmit={handleProfileUpdate}>
                             <div className="form-group">
-                                <label>New Password</label>
+                                <label>Username</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={profileModal.username}
+                                    onChange={(e) => setProfileModal({ ...profileModal, username: e.target.value })}
+                                    placeholder="Enter username"
+                                    required
+                                    minLength={3}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>New Password (Optional)</label>
                                 <input
                                     type="password"
                                     className="form-input"
-                                    value={passwordModal.newPassword}
-                                    onChange={(e) => setPasswordModal({ ...passwordModal, newPassword: e.target.value })}
-                                    placeholder="Min. 6 characters"
+                                    value={profileModal.newPassword}
+                                    onChange={(e) => setProfileModal({ ...profileModal, newPassword: e.target.value })}
+                                    placeholder="Leave blank to keep current"
+                                />
+                            </div>
+                            <div className="modal-actions">
+                                <button type="button" className="btn btn-ghost" onClick={() => setProfileModal({ ...profileModal, open: false })}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Update Profile</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showCreateUserModal && (
+                <div className="modal-overlay" onClick={() => setShowCreateUserModal(false)}>
+                    <div className="modal glass-card" onClick={e => e.stopPropagation()}>
+                        <h2>Create New User</h2>
+                        <form onSubmit={handleCreateUser}>
+                            <div className="form-group">
+                                <label>Username</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={newUser.username}
+                                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                                    placeholder="Enter username"
                                     autoFocus
                                     required
                                 />
                             </div>
+                            <div className="form-group">
+                                <label>Password</label>
+                                <input
+                                    type="password"
+                                    className="form-input"
+                                    value={newUser.password}
+                                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                    placeholder="Min. 6 characters"
+                                    required
+                                />
+                            </div>
                             <div className="modal-actions">
-                                <button type="button" className="btn btn-ghost" onClick={() => setPasswordModal({ ...passwordModal, open: false })}>Cancel</button>
-                                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Update</button>
+                                <button type="button" className="btn btn-ghost" onClick={() => setShowCreateUserModal(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Create User</button>
                             </div>
                         </form>
                     </div>

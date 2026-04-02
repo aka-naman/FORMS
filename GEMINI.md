@@ -104,4 +104,33 @@ The Express backend.
 - **Surgical Edits**: When modifying `FormBuilderPage.jsx` or `FormSubmitPage.jsx`, ensure you maintain the `FIELD_TYPES` array and its corresponding rendering logic.
 - **Database Safety**: Always check for `user_id` isolation when writing or modifying backend routes.
 - **Styling**: Adhere to the Glassmorphism CSS variables defined in `index.css`.
-- **Adding Field Types**: Refer to `FIELD_TYPES_GUIDE.md` for the 5-step process (Frontend UI -> Default Options -> Render Logic -> Options UI -> Backend Verification).
+---
+
+## 📅 Session Update Log: April 1, 2026
+
+### 🛠️ Architecture & Core Changes
+- **Collaborative Access System:** 
+  - Forms are visible globally but require explicit approval for interaction (Build, Submit, View, Export, Duplicate).
+  - **Ownership-First UI:** Forms are grouped by creator on the dashboard, with the current user's forms prioritized at the top.
+  - **Standardized Security:** Centralized `checkFormAccess` and `checkFormOwnership` utilities in `middleware/auth.js`.
+  - **Dynamic Reset:** (Reverted) Experimented with session-based approval resets to ensure fresh security checks.
+- **Enhanced Dashboard:** 
+  - Added a global **Search Bar** to filter forms by name or creator.
+  - Improved UI stability by switching to block layouts for form titles, preventing vertical character breakage.
+  - **Collaborator Export:** Enabled approved collaborators to export submitted data to Excel.
+
+### ✨ New Features & Field Types
+- **🏠 Advanced Residential Address:** 
+  - Composite field with automatic **Pincode Lookup** (auto-fills State and District).
+- **🧮 CGPA to Percentage Converter:** 
+  - Integrated math formulas for automated data conversion.
+- **🎓 Dynamic Learning Lists:**
+  - **Branch Learning:** Automatically expands the "Branch / Stream" dropdown based on "Other" user submissions.
+- **👑 Admin User Management:** 
+  - Admins can now manage all users, reset passwords, and change roles directly from the dashboard.
+  - **Admin Privacy:** Restricted Admin-owned forms from being visible to regular users unless explicitly shared.
+
+### 🐞 Bug Fixes
+- **🏗️ Layout Glitches:** Fixed major UI issues where form titles would break into vertical lines on certain screens.
+- **🔐 Access Logic:** Resolved "form not found" errors during duplication and navigation.
+- **📥 Export Stabilized:** Standardized the Excel export route to handle collaborative permissions correctly.

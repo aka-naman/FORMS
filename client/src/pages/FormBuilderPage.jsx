@@ -18,6 +18,8 @@ const FIELD_TYPES = [
     { value: 'branch', label: 'Branch / Stream', icon: '🎯' },
     { value: 'duration', label: 'Duration', icon: '⏱️' },
     { value: 'university_autocomplete', label: 'University Autocomplete', icon: '🎓' },
+    { value: 'residential_address', label: 'Residential Address', icon: '🏠' },
+    { value: 'cgpa_converter', label: 'CGPA to Percentage', icon: '🧮' },
 ];
 
 const DEFAULT_OPTIONS = {
@@ -55,10 +57,17 @@ export default function FormBuilderPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
+    const [dynamicOptions, setDynamicOptions] = useState(DEFAULT_OPTIONS);
 
     useEffect(() => {
         const load = async () => {
             try {
+                // Fetch dynamic branches from backend
+                const branchesRes = await api.get('/autocomplete/branches');
+                if (branchesRes.data.results && branchesRes.data.results.length > 0) {
+                    setDynamicOptions(prev => ({ ...prev, branch: branchesRes.data.results }));
+                }
+
                 const [formRes, fieldsRes] = await Promise.all([
                     api.get('/forms'),
                     api.get(`/forms/${formId}/versions/${versionId}/fields`),
@@ -97,10 +106,10 @@ export default function FormBuilderPage() {
         const newFields = [...fields];
         newFields[index] = { ...newFields[index], [key]: value };
         // Auto-fill default options when switching to branch or duration
-        if (key === 'type' && DEFAULT_OPTIONS[value]) {
+        if (key === 'type' && dynamicOptions[value]) {
             const existing = newFields[index].options_json || [];
             if (existing.length === 0) {
-                newFields[index].options_json = [...DEFAULT_OPTIONS[value]];
+                newFields[index].options_json = [...dynamicOptions[value]];
             }
         }
         setFields(newFields);

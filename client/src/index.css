@@ -579,6 +579,56 @@ textarea.form-input {
   background-clip: text;
 }
 
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.6rem 2.5rem 0.6rem 1rem;
+  background: rgba(100, 100, 160, 0.08);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  transition: var(--transition);
+  outline: none;
+  backdrop-filter: blur(8px);
+}
+
+.search-input:focus {
+  border-color: var(--accent-primary);
+  background: rgba(108, 92, 231, 0.1);
+  box-shadow: 0 0 15px rgba(108, 92, 231, 0.2);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+}
+
+.search-clear:hover {
+  color: var(--accent-danger);
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -605,17 +655,17 @@ textarea.form-input {
 }
 
 .form-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .form-card-title {
   font-size: 1.15rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  word-break: break-word;
+  display: block;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  margin-bottom: 0.5rem;
 }
 
 .form-owner-badge {
@@ -625,12 +675,15 @@ textarea.form-input {
   padding: 0.25rem 0.75rem;
   background: rgba(108, 92, 231, 0.1);
   border-radius: var(--radius-sm);
+  display: inline-block;
+  margin-bottom: 0.5rem;
 }
 
 .form-card-badges {
   display: flex;
-  gap: 0.4rem;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .form-card-meta {
@@ -1363,6 +1416,11 @@ textarea.form-input {
   .submissions-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .search-container {
+    min-width: 100%;
+    margin-top: 0.5rem;
   }
 
   .header-right {

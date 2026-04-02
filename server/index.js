@@ -13,9 +13,10 @@ const authRoutes = require('./routes/auth');
 const formRoutes = require('./routes/forms');
 const fieldRoutes = require('./routes/fields');
 const submissionRoutes = require('./routes/submissions');
-const autocompleteRoutes = require('./routes/autocomplete');
 const exportRoutes = require('./routes/export');
+const autocompleteRoutes = require('./routes/autocomplete');
 const adminUserRoutes = require('./routes/admin-users');
+const permissionRoutes = require('./routes/permissions');
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
@@ -28,11 +29,12 @@ app.use(express.json({ limit: '10mb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/forms', formRoutes);
+app.use('/api/export', exportRoutes);
+app.use('/api/forms', formRoutes); // Contains /:id/duplicate, /:id
+app.use('/api/forms', submissionRoutes); // Contains /:formId/submissions
 app.use('/api/forms', fieldRoutes);
-app.use('/api/forms', submissionRoutes);
-app.use('/api/forms', exportRoutes);
 app.use('/api/admin/users', adminUserRoutes);
+app.use('/api/permissions', permissionRoutes);
 app.use('/api/autocomplete', autocompleteRoutes);
 
 // Health check

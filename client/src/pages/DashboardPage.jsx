@@ -6,11 +6,14 @@ import api from '../api/client';
 
 export default function DashboardPage() {
     const [forms, setForms] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [newFormName, setNewFormName] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [renameId, setRenameId] = useState(null);
     const [renameName, setRenameName] = useState('');
+    const [pendingRequests, setPendingRequests] = useState([]);
+    const [expandedUsers, setExpandedUsers] = useState({});
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
@@ -26,7 +29,33 @@ export default function DashboardPage() {
         }
     };
 
-    useEffect(() => { fetchForms(); }, []);
+    const fetchRequests = async () => {
+        try {
+            const res = await api.get('/permissions/pending');
+            setPendingRequests(res.data.requests);
+        } catch (e) { console.error(e); }
+    };
+
+    useEffect(() => { 
+        fetchForms(); 
+        fetchRequests();
+    }, []);
+
+    const handleRequestAccess = async (formId) => {
+        try {
+            await api.post(`/permissions/request/${formId}`);
+            // Optimistically update status
+            setForms(prevForms => prevForms.map(f => f.id === formId ? { ...f, access_status: 'pending' } : f));
+        } catch (e) { alert('Failed to request access'); }
+    };
+
+    const handleApprove = async (permId) => {
+        try {
+            await api.post(`/permissions/approve/${permId}`);
+            fetchRequests();
+            fetchForms();
+        } catch (e) { alert('Approval failed'); }
+    };
 
     const handleCreate = async (e) => {
         e.preventDefault();
@@ -55,8 +84,13 @@ export default function DashboardPage() {
 
     const handleDuplicate = async (id) => {
         try {
-            await api.post(`/forms/${id}/duplicate`);
-            fetchForms();
+            const res = await api.post(`/forms/${id}/duplicate`);
+            const newForm = res.data.form;
+            if (newForm && newForm.latest_version_id) {
+                navigate(`/forms/${newForm.id}/builder/${newForm.latest_version_id}`);
+            } else {
+                fetchForms();
+            }
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to duplicate');
         }
@@ -74,7 +108,7 @@ export default function DashboardPage() {
 
     const handleExport = async (id, name) => {
         try {
-            const res = await api.get(`/forms/${id}/export`, { responseType: 'blob' });
+            const res = await api.get(`/export/${id}`, { responseType: 'blob' });
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -84,9 +118,38 @@ export default function DashboardPage() {
             link.remove();
             window.URL.revokeObjectURL(url);
         } catch (err) {
-            alert(err.response?.data?.error || 'Export failed');
+            console.error('Export failed:', err);
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Export failed: ${errMsg}`);
         }
     };
+
+    const toggleUserExpand = (owner) => {
+        setExpandedUsers(prev => ({ ...prev, [owner]: !prev[owner] }));
+    };
+
+    // Group forms by owner
+    const filteredForms = forms.filter(form => {
+        const search = searchTerm.toLowerCase();
+        return (
+            form.name?.toLowerCase().includes(search) || 
+            form.owner_username?.toLowerCase().includes(search)
+        );
+    });
+
+    const groupedForms = filteredForms.reduce((acc, form) => {
+        const owner = form.owner_username || 'Unknown';
+        if (!acc[owner]) acc[owner] = [];
+        acc[owner].push(form);
+        return acc;
+    }, {});
+
+    // Sort owners so current user is always first
+    const sortedOwners = Object.keys(groupedForms).sort((a, b) => {
+        if (a === user?.username) return -1;
+        if (b === user?.username) return 1;
+        return a.localeCompare(b);
+    });
 
     if (loading) {
         return (
@@ -103,6 +166,18 @@ export default function DashboardPage() {
                 <div className="header-left">
                     <h1>📋 Form Dashboard</h1>
                     <span className="user-badge">{user?.role === 'admin' ? '👑 Admin' : '👤 User'}: {user?.username}</span>
+                    <div className="search-container">
+                        <input
+                            type="text"
+                            className="search-input"
+                            placeholder="Search forms or users..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm && (
+                            <button className="search-clear" onClick={() => setSearchTerm('')}>✕</button>
+                        )}
+                    </div>
                 </div>
                 <div className="header-right">
                     <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
@@ -126,6 +201,21 @@ export default function DashboardPage() {
                     </button>
                 </div>
             </header>
+
+            {/* Pending Requests for Owners/Admins */}
+            {pendingRequests.length > 0 && (
+                <div className="pending-requests-section glass-card">
+                    <h3>🔔 Pending Access Requests</h3>
+                    <div className="requests-list">
+                        {pendingRequests.map(req => (
+                            <div key={req.id} className="request-item">
+                                <span><strong>{req.requester_username}</strong> wants to access <strong>{req.form_name}</strong></span>
+                                <button className="btn btn-sm btn-primary" onClick={() => handleApprove(req.id)}>Approve</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Create Modal */}
             {showCreateModal && (
@@ -156,87 +246,129 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {/* Forms Grid */}
-            <div className="forms-grid">
+            {/* Forms Grouped by User */}
+            <div className="forms-grouped" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', padding: '1rem' }}>
                 {forms.length === 0 ? (
                     <div className="empty-state glass-card">
                         <div className="empty-icon">📝</div>
-                        <h2>No Forms Yet</h2>
-                        <p>Create your first form to get started.</p>
+                        <h2>No Forms Found</h2>
+                        <p>Create a form or wait for shared forms to appear.</p>
                         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
                             Create First Form
                         </button>
                     </div>
+                ) : filteredForms.length === 0 ? (
+                    <div className="empty-state glass-card">
+                        <div className="empty-icon">🔍</div>
+                        <h2>No Matches Found</h2>
+                        <p>We couldn't find any forms matching "{searchTerm}".</p>
+                        <button className="btn btn-ghost" onClick={() => setSearchTerm('')}>
+                            Clear Search
+                        </button>
+                    </div>
                 ) : (
-                    forms.map((form) => {
-                        const isOwner = user?.id === form.user_id || user?.role === 'admin';
+                    sortedOwners.map((owner) => {
+                        const ownerForms = groupedForms[owner];
+                        const isExpanded = expandedUsers[owner] !== false; // Default to expanded
+                        const isMe = owner === user?.username;
+
                         return (
-                        <div key={form.id} className="form-card glass-card">
-                            <div className="form-card-header">
-                                {renameId === form.id ? (
-                                    <div className="rename-inline">
-                                        <input
-                                            type="text"
-                                            className="form-input form-input-sm"
-                                            value={renameName}
-                                            onChange={(e) => setRenameName(e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') handleRename(form.id); if (e.key === 'Escape') setRenameId(null); }}
-                                            autoFocus
-                                        />
-                                        <button className="btn btn-sm btn-primary" onClick={() => handleRename(form.id)}>Save</button>
-                                        <button className="btn btn-sm btn-ghost" onClick={() => setRenameId(null)}>✕</button>
+                            <div key={owner} className="user-form-group">
+                                <h2 className="user-group-title" onClick={() => toggleUserExpand(owner)} style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>
+                                    <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isExpanded ? '▼' : '▶'}</span>
+                                    {isMe ? '⭐ My Forms' : `👤 ${owner}'s Forms`} 
+                                    <span className="badge badge-count" style={{ marginLeft: '0.5rem' }}>{ownerForms.length}</span>
+                                </h2>
+                                
+                                {isExpanded && (
+                                    <div className="forms-grid">
+                                        {ownerForms.map((form) => {
+                                            const status = form.access_status;
+                                            const isOwner = status === 'owner';
+                                            const isAdmin = status === 'admin';
+                                            const hasAccess = isOwner || isAdmin || status === 'approved';
+
+                                            return (
+                                                <div key={form.id} className="form-card glass-card">
+                                                    <div className="form-card-header">
+                                                        {renameId === form.id ? (
+                                                            <div className="rename-inline">
+                                                                <input
+                                                                    type="text"
+                                                                    className="form-input form-input-sm"
+                                                                    value={renameName}
+                                                                    onChange={(e) => setRenameName(e.target.value)}
+                                                                    onKeyDown={(e) => { if (e.key === 'Enter') handleRename(form.id); if (e.key === 'Escape') setRenameId(null); }}
+                                                                    autoFocus
+                                                                />
+                                                                <button className="btn btn-sm btn-primary" onClick={() => handleRename(form.id)}>Save</button>
+                                                                <button className="btn btn-sm btn-ghost" onClick={() => setRenameId(null)}>✕</button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <h3 className="form-card-title">{form.name}</h3>
+                                                            </>
+                                                        )}
+                                                        <div className="form-card-badges">
+                                                            {form.is_locked && <span className="badge badge-locked">🔒 Locked</span>}
+                                                            <span className="badge badge-count">{form.submission_count} submissions</span>
+                                                            {isAdmin && <span className="badge badge-admin">Global Access</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="form-card-meta">
+                                                        <span>Created: {new Date(form.created_at).toLocaleDateString()}</span>
+                                                        {form.latest_version_id && <span>Version {form.version_number}</span>}
+                                                    </div>
+
+                                                    <div className="form-card-actions">
+                                                        {(isOwner || isAdmin) && !form.is_locked && (
+                                                            <button className="btn btn-sm btn-accent" onClick={() => navigate(`/forms/${form.id}/builder/${form.latest_version_id}`)}>
+                                                                ✏️ Build
+                                                            </button>
+                                                        )}
+                                                        
+                                                        {hasAccess ? (
+                                                            <>
+                                                                <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/forms/${form.id}/submit`)}>
+                                                                    📝 Fill
+                                                                </button>
+                                                                <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/forms/${form.id}/submissions`)}>
+                                                                    📊 View
+                                                                </button>
+                                                                <button className="btn btn-sm btn-secondary" onClick={() => handleExport(form.id, form.name)}>
+                                                                    📥 Export
+                                                                </button>
+                                                                {(isOwner || isAdmin) && (
+                                                                    <>
+                                                                        {!form.is_locked && (
+                                                                            <button className="btn btn-sm btn-ghost" onClick={() => { setRenameId(form.id); setRenameName(form.name); }}>
+                                                                                ✏️ Rename
+                                                                            </button>
+                                                                        )}
+                                                                        <button className="btn btn-sm btn-ghost" onClick={() => handleDuplicate(form.id)}>
+                                                                            📋 Duplicate
+                                                                        </button>
+                                                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(form.id, form.name)}>
+                                                                            🗑️ Delete
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            status === 'pending' ? (
+                                                                <button className="btn btn-sm btn-ghost" disabled>⏳ Request Sent</button>
+                                                            ) : (
+                                                                <button className="btn btn-sm btn-primary" onClick={() => handleRequestAccess(form.id)}>🔓 Request Access</button>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                ) : (
-                                    <>
-                                        <h3 className="form-card-title">{form.name}</h3>
-                                        {user?.role === 'admin' && form.owner_username && !isOwner && (
-                                            <span className="form-owner-badge">by {form.owner_username}</span>
-                                        )}
-                                    </>
-                                )}
-                                <div className="form-card-badges">
-                                    {form.is_locked && <span className="badge badge-locked">🔒 Locked</span>}
-                                    <span className="badge badge-count">{form.submission_count} submissions</span>
-                                </div>
-                            </div>
-
-                            <div className="form-card-meta">
-                                <span>Created: {new Date(form.created_at).toLocaleDateString()}</span>
-                                {form.latest_version_id && <span>Version {form.version_number}</span>}
-                            </div>
-
-                            <div className="form-card-actions">
-                                {isOwner && !form.is_locked && (
-                                    <button className="btn btn-sm btn-accent" onClick={() => navigate(`/forms/${form.id}/builder/${form.latest_version_id}`)}>
-                                        ✏️ Build
-                                    </button>
-                                )}
-                                <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/forms/${form.id}/submit`)}>
-                                    📝 Fill
-                                </button>
-                                {isOwner && (
-                                    <>
-                                        <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/forms/${form.id}/submissions`)}>
-                                            📊 View
-                                        </button>
-                                        <button className="btn btn-sm btn-secondary" onClick={() => handleExport(form.id, form.name)}>
-                                            📥 Export
-                                        </button>
-                                        {!form.is_locked && (
-                                            <button className="btn btn-sm btn-ghost" onClick={() => { setRenameId(form.id); setRenameName(form.name); }}>
-                                                ✏️ Rename
-                                            </button>
-                                        )}
-                                        <button className="btn btn-sm btn-ghost" onClick={() => handleDuplicate(form.id)}>
-                                            📋 Duplicate
-                                        </button>
-                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(form.id, form.name)}>
-                                            🗑️ Delete
-                                        </button>
-                                    </>
                                 )}
                             </div>
-                        </div>
                         );
                     })
                 )}

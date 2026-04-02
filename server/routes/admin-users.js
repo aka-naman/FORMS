@@ -35,6 +35,58 @@ router.delete('/:userId', async (req, res) => {
 });
 
 /**
+ * PUT /api/admin/users/:userId/profile — Update a user's profile (username/password)
+ */
+router.put('/:userId/profile', async (req, res) => {
+    try {
+        const targetUserId = parseInt(req.params.userId);
+        const { username, password } = req.body;
+
+        if (!username && !password) {
+            return res.status(400).json({ error: 'Username or password is required' });
+        }
+
+        const updates = [];
+        const params = [];
+        let paramIdx = 1;
+
+        if (username) {
+            // Check if username already exists for another user
+            const existing = await pool.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, targetUserId]);
+            if (existing.rows.length > 0) {
+                return res.status(409).json({ error: 'Username already taken' });
+            }
+            updates.push(`username = $${paramIdx++}`);
+            params.push(username);
+        }
+
+        if (password) {
+            if (password.length < 6) {
+                return res.status(400).json({ error: 'Password must be at least 6 characters' });
+            }
+            const passwordHash = await bcrypt.hash(password, 12);
+            updates.push(`password_hash = $${paramIdx++}`);
+            params.push(passwordHash);
+        }
+
+        params.push(targetUserId);
+        const result = await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING username`,
+            params
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ message: `Profile for "${result.rows[0].username}" updated successfully`, username: result.rows[0].username });
+    } catch (err) {
+        console.error('Admin update profile error:', err);
+        res.status(500).json({ error: 'Failed to update user profile' });
+    }
+});
+
+/**
  * PUT /api/admin/users/:userId/password — Reset a user's password
  */
 router.put('/:userId/password', async (req, res) => {

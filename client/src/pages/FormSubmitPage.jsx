@@ -17,11 +17,18 @@ export default function FormSubmitPage() {
     const [error, setError] = useState('');
     const [fieldError, setFieldError] = useState({ fieldId: null, message: '' });
     const [versionId, setVersionId] = useState(null);
+    const [locations, setLocations] = useState({}); // { State: [Districts] }
+    const [dynamicBranches, setDynamicBranches] = useState([]); // learned branches
     const fieldRefs = useRef({});
 
     useEffect(() => {
         const load = async () => {
             try {
+                // Load locations for residential address
+                api.get('/autocomplete/locations').then(res => setLocations(res.data)).catch(e => console.error('Failed to load locations', e));
+                // Load dynamic branches
+                api.get('/autocomplete/branches').then(res => setDynamicBranches(res.data.results || [])).catch(e => console.error('Failed to load branches', e));
+
                 const formsRes = await api.get('/forms');
                 const form = formsRes.data.forms.find(f => f.id === parseInt(formId));
                 if (!form || !form.latest_version_id) {
@@ -39,7 +46,7 @@ export default function FormSubmitPage() {
                 const initialCheckboxes = {};
                 fieldsRes.data.fields.forEach(f => {
                     initialValues[f.id] = '';
-                    if (f.type === 'checkboxes') initialCheckboxes[f.id] = [];
+                    if (f.type === 'checkboxes' || f.type === 'multiple_choice') initialCheckboxes[f.id] = [];
                 });
                 setValues(initialValues);
                 setCheckboxValues(initialCheckboxes);
@@ -103,8 +110,8 @@ export default function FormSubmitPage() {
                 val = otherValues[field.id] || '';
             }
 
-            // Checkboxes required check
-            if (field.type === 'checkboxes') {
+            // Checkboxes / MCQ required check
+            if (field.type === 'checkboxes' || field.type === 'multiple_choice') {
                 if (rules.required && (checkboxValues[field.id] || []).length === 0) {
                     return { error: `"${field.label}" requires at least one selection`, fieldId: field.id };
                 }
@@ -118,8 +125,8 @@ export default function FormSubmitPage() {
 
             if (field.type === 'integer' && val !== '' && val !== undefined) {
                 const num = Number(val);
-                if (!Number.isInteger(num)) {
-                    return { error: `"${field.label}" must be a valid integer`, fieldId: field.id };
+                if (isNaN(num)) {
+                    return { error: `"${field.label}" must be a valid number`, fieldId: field.id };
                 }
                 if (rules.min !== undefined && num < rules.min) {
                     return { error: `"${field.label}" must be at least ${rules.min}`, fieldId: field.id };
@@ -158,13 +165,13 @@ export default function FormSubmitPage() {
         }
         setFieldError({ fieldId: null, message: '' });
 
-        // Build final values — replace __other__ with actual text; flatten checkboxes to comma string
+        // Build final values — replace __other__ with actual text; flatten checkboxes/MCQ to comma string
         const finalValues = { ...values };
         for (const field of fields) {
             if (['branch', 'duration'].includes(field.type) && finalValues[field.id] === '__other__') {
                 finalValues[field.id] = otherValues[field.id] || '';
             }
-            if (field.type === 'checkboxes') {
+            if (field.type === 'checkboxes' || field.type === 'multiple_choice') {
                 finalValues[field.id] = (checkboxValues[field.id] || []).join(', ');
             }
         }
@@ -240,25 +247,26 @@ export default function FormSubmitPage() {
                         placeholder="10-digit phone number" maxLength={10} />
                 );
 
-            case 'multiple_choice':
+            case 'multiple_choice': {
+                const selected = checkboxValues[field.id] || [];
                 return (
                     <div className="choice-list">
                         {(field.options_json || []).map((opt, i) => (
                             <label key={i} className="choice-option">
                                 <input
-                                    type="radio"
-                                    name={`field_${field.id}`}
+                                    type="checkbox"
                                     value={opt}
-                                    checked={val === opt}
-                                    onChange={() => handleChange(field.id, opt)}
+                                    checked={selected.includes(opt)}
+                                    onChange={(e) => handleCheckboxChange(field.id, opt, e.target.checked)}
                                     className="choice-input"
                                 />
-                                <span className="choice-custom-indicator"></span>
+                                <span className="choice-custom-indicator choice-check-indicator"></span>
                                 <span>{opt}</span>
                             </label>
                         ))}
                     </div>
                 );
+            }
 
             case 'checkboxes': {
                 const selected = checkboxValues[field.id] || [];
@@ -348,12 +356,16 @@ export default function FormSubmitPage() {
                 return <input type="time" className="form-input" value={val} onChange={(e) => handleChange(field.id, e.target.value)} />;
 
             case 'branch':
-            case 'duration':
+            case 'duration': {
+                const isBranch = field.type === 'branch';
+                const baseOptions = field.options_json || [];
+                const combinedOptions = isBranch ? Array.from(new Set([...baseOptions, ...dynamicBranches])) : baseOptions;
+
                 return (
                     <div className="select-with-other">
                         <select className="form-input" value={val} onChange={(e) => handleChange(field.id, e.target.value)}>
                             <option value="">Select an option</option>
-                            {(field.options_json || []).map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            {combinedOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             <option value="__other__">Other</option>
                         </select>
                         {val === '__other__' && (
@@ -368,6 +380,7 @@ export default function FormSubmitPage() {
                         )}
                     </div>
                 );
+            }
 
             case 'university_autocomplete':
                 return (
@@ -382,9 +395,113 @@ export default function FormSubmitPage() {
             case 'integer':
                 return (
                     <input type="number" className="form-input" value={val}
-                        onChange={(e) => { if (e.target.value === '' || /^-?\d*$/.test(e.target.value)) handleChange(field.id, e.target.value); }}
-                        placeholder={`Enter ${field.label}`} step="1" />
+                        onChange={(e) => { if (e.target.value === '' || /^-?\d*\.?\d*$/.test(e.target.value)) handleChange(field.id, e.target.value); }}
+                        placeholder={`Enter ${field.label}`} step="any" />
                 );
+
+            case 'residential_address': {
+                // value is stored as "House ||| District ||| State ||| Pincode"
+                const parts = val.split(' ||| ');
+                const house = parts[0] || '';
+                const district = parts[1] || '';
+                const state = parts[2] || '';
+                const pincode = parts[3] || '';
+
+                const updateAddress = (h, d, s, p) => {
+                    handleChange(field.id, [h, d, s, p].join(' ||| '));
+                };
+
+                const handlePincodeChange = async (pVal) => {
+                    // Only allow digits
+                    const digits = pVal.replace(/\D/g, '').slice(0, 6);
+                    updateAddress(house, district, state, digits);
+                    
+                    if (digits.length === 6) {
+                        try {
+                            const res = await fetch(`https://api.postalpincode.in/pincode/${digits}`);
+                            const data = await res.json();
+                            if (data[0].Status === 'Success') {
+                                const postOffice = data[0].PostOffice[0];
+                                updateAddress(house, postOffice.District, postOffice.State, digits);
+                            }
+                        } catch (e) { console.error('Pincode lookup failed', e); }
+                    }
+                };
+
+                return (
+                    <div className="address-composite">
+                        <textarea 
+                            className="form-input" 
+                            style={{ marginBottom: '0.5rem', minHeight: '80px', width: '100%', resize: 'vertical' }}
+                            placeholder="Detailed House No / Area / Street" 
+                            value={house} 
+                            onChange={(e) => updateAddress(e.target.value, district, state, pincode)} 
+                        />
+                        <div className="field-row" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <input 
+                                type="text" 
+                                className="form-input flex-1" 
+                                placeholder="Pincode (auto-fills State/District)" 
+                                value={pincode} 
+                                onChange={(e) => handlePincodeChange(e.target.value)} 
+                                maxLength={6} 
+                            />
+                        </div>
+                        <div className="field-row" style={{ gap: '0.5rem' }}>
+                            <select className="form-input flex-1" value={state} onChange={(e) => updateAddress(house, '', e.target.value, pincode)}>
+                                <option value="">Select State</option>
+                                {Object.keys(locations).sort().map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <select className="form-input flex-1" value={district} onChange={(e) => updateAddress(house, e.target.value, state, pincode)} disabled={!state}>
+                                <option value="">Select District</option>
+                                {(locations[state] || []).sort().map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                );
+            }
+
+            case 'cgpa_converter': {
+                // val is the raw result (percentage). We need local state for formula and CGPA input.
+                // But for simplicity, we can store "CGPA:X, Formula:Y, Result:Z%" in the value and parse it.
+                // Actually, let's use otherValues to store the CGPA and Formula temporarily.
+                const localData = otherValues[field.id] || { cgpa: '', formula: 'x10' };
+                const updateLocal = (k, v) => {
+                    const next = { ...localData, [k]: v };
+                    setOtherValues(prev => ({ ...prev, [field.id]: next }));
+
+                    // Calculate result
+                    const c = parseFloat(next.cgpa);
+                    if (!isNaN(c)) {
+                        let res = 0;
+                        if (next.formula === 'x10') res = c * 10;
+                        else if (next.formula === 'x9.5') res = c * 9.5;
+                        else if (next.formula === 'minus0.75x10') res = (c - 0.75) * 10;
+                        else if (next.formula === 'custom') res = c * (parseFloat(next.customMultiplier) || 0);
+                        handleChange(field.id, `${res.toFixed(2)}% (Formula: ${next.formula}, CGPA: ${next.cgpa})`);
+                    } else {
+                        handleChange(field.id, '');
+                    }
+                };
+
+                return (
+                    <div className="cgpa-composite">
+                        <div className="field-row" style={{ gap: '0.5rem' }}>
+                            <input type="number" className="form-input flex-1" placeholder="Enter CGPA" value={localData.cgpa} onChange={(e) => updateLocal('cgpa', e.target.value)} step="0.01" />
+                            <select className="form-input flex-1" value={localData.formula} onChange={(e) => updateLocal('formula', e.target.value)}>
+                                <option value="x10">CGPA × 10</option>
+                                <option value="x9.5">CGPA × 9.5</option>
+                                <option value="minus0.75x10">(CGPA - 0.75) × 10</option>
+                                <option value="custom">Custom Multiplier</option>
+                            </select>
+                        </div>
+                        {localData.formula === 'custom' && (
+                            <input type="number" className="form-input" style={{ marginTop: '0.5rem' }} placeholder="Enter Multiplier (e.g. 10)" value={localData.customMultiplier || ''} onChange={(e) => updateLocal('customMultiplier', e.target.value)} />
+                        )}
+                        {val && <div className="cgpa-result">Result: <strong>{val.split(' ')[0]}</strong></div>}
+                    </div>
+                );
+            }
 
             default:
                 return <input type="text" className="form-input" value={val} onChange={(e) => handleChange(field.id, e.target.value)} />;

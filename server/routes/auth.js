@@ -25,15 +25,36 @@ router.post('/register', async (req, res) => {
 
         const { username, password } = value;
 
-        // Check if user exists
+        // Check if any user exists
+        const countResult = await pool.query('SELECT COUNT(*) FROM users');
+        const userCount = parseInt(countResult.rows[0].count);
+
+        // If users exist, require authentication and admin role
+        if (userCount > 0) {
+            // Manual check for JWT in headers since we want a custom error for register
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Only admins can create new users' });
+            }
+            const token = authHeader.split(' ')[1];
+            try {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                if (decoded.role !== 'admin') {
+                    return res.status(403).json({ error: 'Only admins can create new users' });
+                }
+            } catch (err) {
+                return res.status(401).json({ error: 'Invalid or expired session' });
+            }
+        }
+
+        // Check if username exists
         const existing = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
         if (existing.rows.length > 0) {
             return res.status(409).json({ error: 'Username already taken' });
         }
 
         // First user becomes admin
-        const countResult = await pool.query('SELECT COUNT(*) FROM users');
-        const role = parseInt(countResult.rows[0].count) === 0 ? 'admin' : 'user';
+        const role = userCount === 0 ? 'admin' : 'user';
 
         const passwordHash = await bcrypt.hash(password, 12);
 
@@ -101,6 +122,17 @@ router.get('/me', authenticate, async (req, res) => {
     } catch (err) {
         console.error('Me error:', err);
         res.status(500).json({ error: 'Failed to get user info' });
+    }
+});
+
+// POST /api/auth/logout
+router.post('/logout', authenticate, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM form_permissions WHERE user_id = $1', [req.user.id]);
+        res.json({ message: 'Logged out and permissions cleared' });
+    } catch (err) {
+        console.error('Logout error:', err);
+        res.status(500).json({ error: 'Logout failed' });
     }
 });
 

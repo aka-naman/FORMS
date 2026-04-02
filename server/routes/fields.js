@@ -1,29 +1,16 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, checkFormAccess, checkFormOwnership } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
-
-/**
- * Check if user owns this form
- */
-const checkFormOwnership = async (formId, userId, userRole) => {
-    const result = await pool.query(
-        'SELECT user_id FROM forms WHERE id = $1',
-        [formId]
-    );
-    if (result.rows.length === 0) {
-        return { exists: false, hasAccess: false };
-    }
-    const form = result.rows[0];
-    const isOwner = form.user_id === userId;
-    const isAdmin = userRole === 'admin';
-    return { exists: true, hasAccess: isOwner || isAdmin, form };
-};
 
 // GET /api/forms/:formId/versions/:versionId/fields
 router.get('/:formId/versions/:versionId/fields', authenticate, async (req, res) => {
     try {
+        const access = await checkFormAccess(req.params.formId, req.user.id, req.user.role);
+        if (!access.exists) return res.status(404).json({ error: 'Form not found' });
+        if (!access.hasAccess) return res.status(403).json({ error: 'Access denied' });
+
         const result = await pool.query(
             'SELECT * FROM form_fields WHERE form_version_id = $1 ORDER BY field_order',
             [req.params.versionId]
@@ -44,7 +31,7 @@ router.put('/:formId/versions/:versionId/fields', authenticate, async (req, res)
             return res.status(400).json({ error: 'fields must be an array' });
         }
 
-        // Check ownership
+        // Check ownership (only owners/admins can edit schema)
         const ownership = await checkFormOwnership(req.params.formId, req.user.id, req.user.role);
         if (!ownership.exists) {
             return res.status(404).json({ error: 'Form not found' });
