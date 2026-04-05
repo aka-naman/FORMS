@@ -41,7 +41,7 @@ router.get('/:id', authenticate, async (req, res) => {
                  FROM submission_values WHERE submission_id = s.id) as values
              FROM submissions s
              LEFT JOIN users u ON s.updated_by = u.id
-             WHERE s.form_version_id = $1
+             WHERE s.form_version_id = $1 AND s.deleted_at IS NULL
              ORDER BY s.submitted_at ASC`,
             [versionId]
         );
@@ -69,10 +69,10 @@ router.get('/:id', authenticate, async (req, res) => {
             };
             if (sub.values) {
                 sub.values.forEach(v => {
-                    const field = fields.find(f => f.id === v.field_id);
                     let val = v.value || '';
-                    if (field && field.type === 'residential_address') {
-                        val = val.split(' ||| ').filter(Boolean).join(', ');
+                    // Aggressively replace the internal separator " ||| " with ", " for all fields
+                    if (typeof val === 'string') {
+                        val = val.replace(/ \|\|\| /g, ', ');
                     }
                     row[`f_${v.field_id}`] = val;
                 });

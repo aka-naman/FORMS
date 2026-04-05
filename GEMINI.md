@@ -30,107 +30,81 @@ The project follows a classic **MERN-like** architecture (PostgreSQL instead of 
 - `.env`: Environment variables (DB credentials, JWT secret, etc.).
 - `docker-compose.yml`: For containerized deployment.
 - `ecosystem.config.js`: PM2 configuration for process management.
-- `README.md`, `Setup.md`, `MULTIUSER.md`, `HOST.md`, `FIELD_TYPES_GUIDE.md`: Comprehensive documentation.
+- `README.md`, `Setup.md`, `MULTIUSER.md`, `HOST.md`, `FIELD_TYPES_GUIDE.md`, `SETUP_OFFLINE.md`: Comprehensive documentation.
 
 ### ⚛️ Client (`/client`)
 The React frontend built with Vite.
 - `src/api/client.js`: Axios instance configured for API communication.
-- `src/contexts/`: `AuthContext.jsx` (user state) and `ThemeContext.jsx`.
+- `src/contexts/`: Split Context pattern (`AuthContext.js` + `AuthProvider.jsx`) for Fast Refresh compatibility.
 - `src/components/`:
   - `ProtectedRoute.jsx`: Restricted to logged-in users.
   - `AdminRoute.jsx`: Restricted to users with the `admin` role.
-  - `AutocompleteInput.jsx`: Reusable component for university search.
+  - `AutocompleteInput.jsx`: Reusable component for university search (Acronym & Dot-agnostic).
+  - `NotificationCenter.jsx`: Global alert system for access requests and approvals.
 - `src/pages/`:
   - `LoginPage.jsx` / `RegisterPage.jsx`: Authentication views.
-  - `DashboardPage.jsx`: Main workspace for users to see their own forms.
-  - `FormBuilderPage.jsx`: The core drag-and-drop / configuration interface for forms.
-  - `FormSubmitPage.jsx`: The public-facing (or internal) view where users fill out forms.
-  - `SubmissionsPage.jsx`: View and export data for a specific form.
-  - `AdminDashboardPage.jsx`: Global stats and user management (Admin only).
+  - `DashboardPage.jsx`: Main workspace. Forms are grouped by owner.
+  - `FormBuilderPage.jsx`: Core builder interface (Sticky header/footer).
+  - `FormSubmitPage.jsx`: Public view with composite fields (CGPA, Address, Zone Group).
+  - `SubmissionsPage.jsx`: Dashboard with Server-Side Pagination, Search, and **Audit History Modal**.
+  - `AdminDashboardPage.jsx`: **Tabbed Interface** for Stats, User Management, and **Activity History Logs**.
 
 ### 🚀 Server (`/server`)
 The Express backend.
-- `index.js`: Entry point, middleware setup, and static file serving.
+- `index.js`: Entry point and route registration.
 - `db/`:
   - `pool.js`: PostgreSQL connection pool.
-  - `migrate.js`: Schema definitions and table creation.
-  - `seed.js`: Initial data (e.g., universities list).
-  - `add-user-isolation.js`: Migration script to enable multi-user features.
-- `middleware/auth.js`: JWT verification and role checking.
+  - `migrate.js`, `add-user-isolation.js`, `industry-upgrade.js`, `add-notifications.js`, `migrate-collateral.js`, `add-group-type.js`: Progressive schema migrations.
+  - `seed.js`: Initial data (universities, initial group list).
+- `middleware/auth.js`: JWT verification and access control logic.
 - `routes/`:
-  - `auth.js`: User registration and login logic.
-  - `forms.js`: CRUD operations for forms (with user isolation).
-  - `fields.js`: Management of form versions and fields.
-  - `submissions.js`: Handling form entries.
-  - `export.js`: Logic for generating Excel files (`exceljs`).
-  - `autocomplete.js`: Search API for university data.
-  - `admin-users.js`: Admin-only endpoints for managing users.
-- `data/universities.xlsx`: Source data for the autocomplete feature.
+  - `auth.js`: User management.
+  - `forms.js`: Form CRUD + Duplication.
+  - `submissions.js`: Paginated submissions + **Audit History fetching**.
+  - `export.js`: Excel generation with **separator cleanup** (`|||` -> `, `).
+  - `autocomplete.js`: Dynamic searching for universities and **Zoned Organizational Groups**.
+  - `permissions.js`: Access request workflow (Notify Owner + All Admins).
+  - `notifications.js`: Alert management.
 
 ---
 
 ## 🔐 Security & Roles
 - **First-User-Admin**: The system automatically assigns the `admin` role to the first user registered.
 - **Role-Based Access Control (RBAC)**:
-  - `👑 Admin`: Can view all forms, all users, and system-wide statistics.
-  - `👤 User`: Can only manage forms they created.
-- **User Isolation**: Forms and submissions are linked to a `user_id`. Middleware ensures users cannot access data belonging to others.
+  - `👑 Admin`: Can view all forms, all users, and system-wide statistics. Can approve any request.
+  - `👤 User`: Can manage own forms. Can request access to others.
+- **Collaborative Access**: Owners and Admins can grant "Approved" status to other users. "Ignored" status is hidden from requesters (shown as Pending).
 
 ---
 
-## 🛠️ Tech Stack Details
-- **Backend Dependencies**: `express`, `pg`, `jsonwebtoken`, `bcryptjs`, `exceljs`, `joi`, `helmet`, `cors`.
-- **Frontend Dependencies**: `react`, `react-router-dom`, `axios`.
-- **Styling**: Modern Vanilla CSS using variables for easy theming and Glassmorphism effects.
+## 📅 Session Update Log: April 5, 2026
 
----
-
-## 🚦 Getting Started (Quick Reference)
-1. **Database**: Create a PostgreSQL DB named `formbuilder`.
-2. **Environment**: Configure `.env` in the root with `DB_USER`, `DB_PASSWORD`, and `JWT_SECRET`.
-3. **Initialization** (Server):
-   ```bash
-   npm run migrate
-   node db/add-user-isolation.js
-   npm run seed
-   ```
-4. **Development**:
-   - Server: `cd server && npm run dev`
-   - Client: `cd client && npm run dev`
-
----
-
-## 💡 Key Instructions for Gemini Agent
-- **Surgical Edits**: When modifying `FormBuilderPage.jsx` or `FormSubmitPage.jsx`, ensure you maintain the `FIELD_TYPES` array and its corresponding rendering logic.
-- **Database Safety**: Always check for `user_id` isolation when writing or modifying backend routes.
-- **Styling**: Adhere to the Glassmorphism CSS variables defined in `index.css`.
----
-
-## 📅 Session Update Log: April 1, 2026
-
-### 🛠️ Architecture & Core Changes
-- **Collaborative Access System:** 
-  - Forms are visible globally but require explicit approval for interaction (Build, Submit, View, Export, Duplicate).
-  - **Ownership-First UI:** Forms are grouped by creator on the dashboard, with the current user's forms prioritized at the top.
-  - **Standardized Security:** Centralized `checkFormAccess` and `checkFormOwnership` utilities in `middleware/auth.js`.
-  - **Dynamic Reset:** (Reverted) Experimented with session-based approval resets to ensure fresh security checks.
-- **Enhanced Dashboard:** 
-  - Added a global **Search Bar** to filter forms by name or creator.
-  - Improved UI stability by switching to block layouts for form titles, preventing vertical character breakage.
-  - **Collaborator Export:** Enabled approved collaborators to export submitted data to Excel.
+### 🛠️ Architecture & UI Refinement
+- **Organized Admin Dashboard**:
+  - Implemented a **Tabbed Layout** to separate "User Activity" from "Approval History".
+  - Added **Scrollable Table Wrappers** with sticky headers for large datasets.
+  - Integrated a global **Activity History Log** for Admins to track all permission actions.
+- **Context Refactoring**:
+  - Refactored `AuthContext` and `ThemeContext` into a split pattern (Logic in `.js`, Provider in `.jsx`) to support **React Fast Refresh** and resolve ESLint errors.
+- **Validation Fixes**:
+  - Resolved a critical bug where **MCQ and Checkbox** fields failed "Required" validation even when filled.
+  - Implemented **strict 6-digit Pincode** enforcement for address fields.
 
 ### ✨ New Features & Field Types
-- **🏠 Advanced Residential Address:** 
-  - Composite field with automatic **Pincode Lookup** (auto-fills State and District).
-- **🧮 CGPA to Percentage Converter:** 
-  - Integrated math formulas for automated data conversion.
-- **🎓 Dynamic Learning Lists:**
-  - **Branch Learning:** Automatically expands the "Branch / Stream" dropdown based on "Other" user submissions.
-- **👑 Admin User Management:** 
-  - Admins can now manage all users, reset passwords, and change roles directly from the dashboard.
-  - **Admin Privacy:** Restricted Admin-owned forms from being visible to regular users unless explicitly shared.
+- **🏢 Zoned Group Type**:
+  - Added a new `zone_group` field type for organizational hierarchy.
+  - Features a two-step selection: **Zone** (I-VIII) followed by a filtered **Group** autocomplete.
+  - Supports "Other" for both Zone and Group with automatic backend learning.
+- **🕒 Audit History Viewer**:
+  - Frontend modal in Submissions page allowing owners/admins to view chronological snapshots of every edit made to a submission.
+- **🧠 Intelligent Learning & Autocomplete**:
+  - Backend now "learns" and saves new States, Districts, Zones, and Groups entered via the "Other" option.
+  - These are automatically merged into the autocomplete/dropdown recommendations for all users.
 
-### 🐞 Bug Fixes
-- **🏗️ Layout Glitches:** Fixed major UI issues where form titles would break into vertical lines on certain screens.
-- **🔐 Access Logic:** Resolved "form not found" errors during duplication and navigation.
-- **📥 Export Stabilized:** Standardized the Excel export route to handle collaborative permissions correctly.
+### 📊 Data & Export
+- **Clean Excel Exports**:
+  - Updated `export.js` to aggressively replace the internal ` ||| ` separator with a professional `, ` for all composite fields.
+  - Soft-deleted submissions are now correctly excluded from Excel exports.
+- **Privacy Controls**:
+  - "Ignore" actions on access requests no longer notify the requester and appear as "Pending" on their dashboard to prevent friction.
+---

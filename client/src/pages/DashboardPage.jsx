@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api/client';
+import NotificationCenter from '../components/NotificationCenter';
 
 export default function DashboardPage() {
     const [forms, setForms] = useState([]);
@@ -12,7 +13,6 @@ export default function DashboardPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [renameId, setRenameId] = useState(null);
     const [renameName, setRenameName] = useState('');
-    const [pendingRequests, setPendingRequests] = useState([]);
     const [expandedUsers, setExpandedUsers] = useState({});
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
@@ -29,16 +29,8 @@ export default function DashboardPage() {
         }
     };
 
-    const fetchRequests = async () => {
-        try {
-            const res = await api.get('/permissions/pending');
-            setPendingRequests(res.data.requests);
-        } catch (e) { console.error(e); }
-    };
-
     useEffect(() => { 
         fetchForms(); 
-        fetchRequests();
     }, []);
 
     const handleRequestAccess = async (formId) => {
@@ -46,19 +38,11 @@ export default function DashboardPage() {
             await api.post(`/permissions/request/${formId}`);
             // Optimistically update status
             setForms(prevForms => prevForms.map(f => f.id === formId ? { ...f, access_status: 'pending' } : f));
-        } catch (e) { alert('Failed to request access'); }
+        } catch { alert('Failed to request access'); }
     };
 
-    const handleApprove = async (permId) => {
-        try {
-            await api.post(`/permissions/approve/${permId}`);
-            fetchRequests();
-            fetchForms();
-        } catch (e) { alert('Approval failed'); }
-    };
-
-    const handleCreate = async (e) => {
-        e.preventDefault();
+    const handleCreate = async (event) => {
+        event.preventDefault();
         if (!newFormName.trim()) return;
         try {
             await api.post('/forms', { name: newFormName.trim() });
@@ -180,6 +164,7 @@ export default function DashboardPage() {
                     </div>
                 </div>
                 <div className="header-right">
+                    <NotificationCenter />
                     <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
                         + New Form
                     </button>
@@ -201,21 +186,6 @@ export default function DashboardPage() {
                     </button>
                 </div>
             </header>
-
-            {/* Pending Requests for Owners/Admins */}
-            {pendingRequests.length > 0 && (
-                <div className="pending-requests-section glass-card">
-                    <h3>🔔 Pending Access Requests</h3>
-                    <div className="requests-list">
-                        {pendingRequests.map(req => (
-                            <div key={req.id} className="request-item">
-                                <span><strong>{req.requester_username}</strong> wants to access <strong>{req.form_name}</strong></span>
-                                <button className="btn btn-sm btn-primary" onClick={() => handleApprove(req.id)}>Approve</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* Create Modal */}
             {showCreateModal && (
@@ -358,6 +328,8 @@ export default function DashboardPage() {
                                                         ) : (
                                                             status === 'pending' ? (
                                                                 <button className="btn btn-sm btn-ghost" disabled>⏳ Request Sent</button>
+                                                            ) : status === 'rejected' ? (
+                                                                <button className="btn btn-sm btn-danger" disabled>🚫 Rejected</button>
                                                             ) : (
                                                                 <button className="btn btn-sm btn-primary" onClick={() => handleRequestAccess(form.id)}>🔓 Request Access</button>
                                                             )

@@ -7,7 +7,10 @@ import '../styles/admin-dashboard.css';
 
 export default function AdminDashboardPage() {
     const [stats, setStats] = useState(null);
+    const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [logsLoading, setLogsLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState('users'); // 'users' or 'approvals'
     const [error, setError] = useState('');
     const [selectedUserId, setSelectedUserId] = useState(null);
     const [userForms, setUserForms] = useState([]);
@@ -22,6 +25,7 @@ export default function AdminDashboardPage() {
 
     useEffect(() => {
         fetchStats();
+        fetchLogs();
     }, []);
 
     const fetchStats = async () => {
@@ -35,6 +39,18 @@ export default function AdminDashboardPage() {
             setError(err.response?.data?.error || 'Failed to load statistics');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchLogs = async () => {
+        try {
+            setLogsLoading(true);
+            const res = await api.get('/permissions/logs');
+            setLogs(res.data.logs);
+        } catch (err) {
+            console.error('Failed to fetch logs:', err);
+        } finally {
+            setLogsLoading(false);
         }
     };
 
@@ -207,102 +223,163 @@ export default function AdminDashboardPage() {
                 </div>
             )}
 
-            <section className="stats-section">
-                <h2>Global Statistics</h2>
-                <div className="stats-grid">
-                    <div className="stat-card glass-card">
-                        <div className="stat-icon">👥</div>
-                        <div className="stat-content">
-                            <div className="stat-number">{stats.total_users}</div>
-                            <div className="stat-label">Total Users</div>
-                        </div>
-                    </div>
-                    <div className="stat-card glass-card">
-                        <div className="stat-icon">📋</div>
-                        <div className="stat-content">
-                            <div className="stat-number">{stats.total_forms}</div>
-                            <div className="stat-label">Total Forms</div>
-                        </div>
-                    </div>
-                    <div className="stat-card glass-card">
-                        <div className="stat-icon">📝</div>
-                        <div className="stat-content">
-                            <div className="stat-number">{stats.total_submissions}</div>
-                            <div className="stat-label">Total Submissions</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <nav className="dashboard-tabs">
+                <button 
+                    className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('users')}
+                >
+                    👥 User Activity
+                </button>
+                <button 
+                    className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('approvals')}
+                >
+                    ⚖️ Approval History
+                </button>
+            </nav>
 
-            <section className="users-section">
-                <h2>User Activity</h2>
-                <div className="table-container glass-card">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Role</th>
-                                <th>Joined</th>
-                                <th>Forms</th>
-                                <th>Submissions</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {stats.users.map(userItem => (
-                                <tr key={userItem.id} className={userItem.role === 'admin' ? 'admin-row' : ''}>
-                                    <td className="user-name">
-                                        {userItem.role === 'admin' ? '👑 ' : '👤 '}
-                                        {userItem.username}
-                                    </td>
-                                    <td>
-                                        <span className={`badge badge-${userItem.role}`}>
-                                            {userItem.role}
-                                        </span>
-                                    </td>
-                                    <td>{new Date(userItem.created_at).toLocaleDateString()}</td>
-                                    <td className="text-center">{userItem.form_count}</td>
-                                    <td className="text-center">{userItem.submission_count}</td>
-                                    <td>
-                                        <div className="admin-actions">
-                                            <button
-                                                className="btn btn-sm btn-secondary"
-                                                onClick={() => viewUserForms(userItem.id)}
-                                                disabled={actionLoading}
-                                                title="View Forms"
-                                            >📂</button>
-                                            <button
-                                                className="btn btn-sm btn-accent"
-                                                onClick={() => setProfileModal({ 
-                                                    open: true, 
-                                                    userId: userItem.id, 
-                                                    username: userItem.username, 
-                                                    originalUsername: userItem.username,
-                                                    newPassword: '' 
-                                                })}
-                                                disabled={actionLoading}
-                                                title="Edit Profile"
-                                            >👤</button>
-                                            <button
-                                                className="btn btn-sm btn-secondary"
-                                                onClick={() => handleChangeRole(userItem.id, userItem.role, userItem.username)}
-                                                disabled={actionLoading || userItem.id === user?.id}
-                                                title="Toggle Role"
-                                            >{userItem.role === 'admin' ? '👤' : '👑'}</button>
-                                            <button
-                                                className="btn btn-sm btn-danger"
-                                                onClick={() => handleDeleteUser(userItem.id, userItem.username)}
-                                                disabled={actionLoading || userItem.id === user?.id}
-                                                title="Delete User"
-                                            >🗑️</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {activeTab === 'users' && (
+                <div className="tab-content animate-fade-in">
+                    <section className="stats-section">
+                        <h2>Global Statistics</h2>
+                        <div className="stats-grid">
+                            <div className="stat-card glass-card">
+                                <div className="stat-icon">👥</div>
+                                <div className="stat-content">
+                                    <div className="stat-number">{stats.total_users}</div>
+                                    <div className="stat-label">Total Users</div>
+                                </div>
+                            </div>
+                            <div className="stat-card glass-card">
+                                <div className="stat-icon">📋</div>
+                                <div className="stat-content">
+                                    <div className="stat-number">{stats.total_forms}</div>
+                                    <div className="stat-label">Total Forms</div>
+                                </div>
+                            </div>
+                            <div className="stat-card glass-card">
+                                <div className="stat-icon">📝</div>
+                                <div className="stat-content">
+                                    <div className="stat-number">{stats.total_submissions}</div>
+                                    <div className="stat-label">Total Submissions</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="users-section">
+                        <h2>User Activity Details</h2>
+                        <div className="table-container glass-card scrollable-table-wrapper">
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Role</th>
+                                        <th>Joined</th>
+                                        <th>Forms</th>
+                                        <th>Submissions</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.users.map(userItem => (
+                                        <tr key={userItem.id} className={userItem.role === 'admin' ? 'admin-row' : ''}>
+                                            <td className="user-name">
+                                                {userItem.role === 'admin' ? '👑 ' : '👤 '}
+                                                {userItem.username}
+                                            </td>
+                                            <td>
+                                                <span className={`badge badge-${userItem.role}`}>
+                                                    {userItem.role}
+                                                </span>
+                                            </td>
+                                            <td>{new Date(userItem.created_at).toLocaleDateString()}</td>
+                                            <td className="text-center">{userItem.form_count}</td>
+                                            <td className="text-center">{userItem.submission_count}</td>
+                                            <td>
+                                                <div className="admin-actions">
+                                                    <button
+                                                        className="btn btn-sm btn-secondary"
+                                                        onClick={() => viewUserForms(userItem.id)}
+                                                        disabled={actionLoading}
+                                                        title="View Forms"
+                                                    >📂</button>
+                                                    <button
+                                                        className="btn btn-sm btn-accent"
+                                                        onClick={() => setProfileModal({ 
+                                                            open: true, 
+                                                            userId: userItem.id, 
+                                                            username: userItem.username, 
+                                                            originalUsername: userItem.username,
+                                                            newPassword: '' 
+                                                        })}
+                                                        disabled={actionLoading}
+                                                        title="Edit Profile"
+                                                    >👤</button>
+                                                    <button
+                                                        className="btn btn-sm btn-secondary"
+                                                        onClick={() => handleChangeRole(userItem.id, userItem.role, userItem.username)}
+                                                        disabled={actionLoading || userItem.id === user?.id}
+                                                        title="Toggle Role"
+                                                    >{userItem.role === 'admin' ? '👤' : '👑'}</button>
+                                                    <button
+                                                        className="btn btn-sm btn-danger"
+                                                        onClick={() => handleDeleteUser(userItem.id, userItem.username)}
+                                                        disabled={actionLoading || userItem.id === user?.id}
+                                                        title="Delete User"
+                                                    >🗑️</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
                 </div>
-            </section>
+            )}
+
+            {activeTab === 'approvals' && (
+                <div className="tab-content animate-fade-in">
+                    <section className="logs-section">
+                        <h2>Approval & Activity Tracking</h2>
+                        <div className="table-container glass-card scrollable-table-wrapper">
+                            {logsLoading ? (
+                                <div className="spinner-container"><div className="spinner"></div></div>
+                            ) : logs.length === 0 ? (
+                                <div className="empty-logs">No activity recorded yet.</div>
+                            ) : (
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Form Name</th>
+                                            <th>Requester</th>
+                                            <th>Action</th>
+                                            <th>Performed By</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {logs.map(log => (
+                                            <tr key={log.id}>
+                                                <td>{log.form_name}</td>
+                                                <td>{log.requester}</td>
+                                                <td>
+                                                    <span className={`badge badge-action-${log.action}`}>
+                                                        {log.action}
+                                                    </span>
+                                                </td>
+                                                <td>{log.performer || 'System'}</td>
+                                                <td>{new Date(log.timestamp).toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {selectedUserId && (
                 <div className="modal-overlay" onClick={closeUserFormsModal}>

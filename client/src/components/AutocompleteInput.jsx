@@ -3,12 +3,19 @@ import api from '../api/client';
 
 export default function AutocompleteInput({ value, onChange, onSelect, placeholder }) {
     const [query, setQuery] = useState(value || '');
+    const [prevValue, setPrevValue] = useState(value);
     const [suggestions, setSuggestions] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const debounceRef = useRef(null);
     const wrapperRef = useRef(null);
+
+    // Sync external value changes
+    if (value !== prevValue) {
+        setQuery(value || '');
+        setPrevValue(value);
+    }
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -20,11 +27,6 @@ export default function AutocompleteInput({ value, onChange, onSelect, placehold
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
-
-    // Sync external value changes
-    useEffect(() => {
-        setQuery(value || '');
-    }, [value]);
 
     const searchUniversities = (q) => {
         if (q.length < 2) {
@@ -49,12 +51,16 @@ export default function AutocompleteInput({ value, onChange, onSelect, placehold
         setQuery(val);
         onChange(val);
 
-        // Debounce 300ms
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => searchUniversities(val), 300);
     };
 
     const handleSelect = (item) => {
+        if (item === 'ADD_NEW') {
+            setShowDropdown(false);
+            if (onSelect) onSelect({ isNew: true, name: query });
+            return;
+        }
         setQuery(item.name);
         setSuggestions([]);
         setShowDropdown(false);
@@ -63,17 +69,24 @@ export default function AutocompleteInput({ value, onChange, onSelect, placehold
     };
 
     const handleKeyDown = (e) => {
-        if (!showDropdown || suggestions.length === 0) return;
+        if (!showDropdown) return;
 
+        // Total items = suggestions + 1 (for Add New)
+        const totalItems = suggestions.length + 1;
+        
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setHighlightedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+            setHighlightedIndex(prev => (prev + 1) % totalItems);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setHighlightedIndex(prev => Math.max(prev - 1, 0));
-        } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+            setHighlightedIndex(prev => (prev <= 0 ? totalItems - 1 : prev - 1));
+        } else if (e.key === 'Enter') {
             e.preventDefault();
-            handleSelect(suggestions[highlightedIndex]);
+            if (highlightedIndex === suggestions.length) {
+                handleSelect('ADD_NEW');
+            } else if (highlightedIndex >= 0) {
+                handleSelect(suggestions[highlightedIndex]);
+            }
         } else if (e.key === 'Escape') {
             setShowDropdown(false);
         }
@@ -88,13 +101,13 @@ export default function AutocompleteInput({ value, onChange, onSelect, placehold
                     value={query}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    onFocus={() => { if (suggestions.length > 0) setShowDropdown(true); }}
+                    onFocus={() => { if (query.length >= 2) setShowDropdown(true); }}
                     placeholder={placeholder || 'Start typing university name...'}
                     autoComplete="off"
                 />
                 {loading && <span className="autocomplete-spinner"></span>}
             </div>
-            {showDropdown && suggestions.length > 0 && (
+            {showDropdown && (
                 <ul className="autocomplete-dropdown">
                     {suggestions.map((item, idx) => (
                         <li
@@ -103,10 +116,19 @@ export default function AutocompleteInput({ value, onChange, onSelect, placehold
                             onMouseDown={(e) => { e.preventDefault(); handleSelect(item); }}
                             onMouseEnter={() => setHighlightedIndex(idx)}
                         >
-                            <span className="autocomplete-name">{item.name}</span>
+                            <span className="autocomplete-name">
+                                {item.name} {item.acronym ? `(${item.acronym})` : ''}
+                            </span>
                             <span className="autocomplete-meta">{item.district}, {item.state}</span>
                         </li>
                     ))}
+                    <li 
+                        className={`autocomplete-item-new ${highlightedIndex === suggestions.length ? 'highlighted' : ''}`}
+                        onMouseDown={(e) => { e.preventDefault(); handleSelect('ADD_NEW'); }}
+                        onMouseEnter={() => setHighlightedIndex(suggestions.length)}
+                    >
+                        ✨ Not in list? Click to add "{query}"
+                    </li>
                 </ul>
             )}
         </div>

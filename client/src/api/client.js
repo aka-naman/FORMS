@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
+    // Use the environment variable if provided, otherwise default to a relative path.
+    // Relative paths ('/api') are best for LAN/Production as they automatically 
+    // use the current host's IP.
     baseURL: import.meta.env.VITE_API_URL || '/api',
     headers: {
         'Content-Type': 'application/json',

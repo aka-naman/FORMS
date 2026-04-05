@@ -1,97 +1,143 @@
-# 🏁 COMPLETE SUPER-DETAILED OFFLINE SETUP GUIDE
-## Multi-User Dynamic Form Builder (V1.0)
+# 🛠️ Offline Setup Guide: Multi-User Form Builder
 
-This document provides the **exact sequence of commands** and steps to set up this project on a computer with **zero internet access**.
-
----
-
-### 📂 Phase 1: Online Preparation (On a PC with Internet)
-*You must perform these steps on a PC with internet before moving to the offline machine.*
-
-1.  **Download Node.js Installer:** Download the `.msi` (Windows) or `.pkg` (Mac) installer for **Node.js v18 or v20**.
-2.  **Download PostgreSQL Installer:** Download the installer for **PostgreSQL v14+**.
-3.  **Prepare the Project Folder:**
-    - Open a terminal in `22-2-forms/server` and run: `npm install`
-    - Open a terminal in `22-2-forms/client` and run: `npm install`
-    - Then run: `npm run build` (This creates the `client/dist` folder).
-4.  **Copy to USB:** Copy the entire `22-2-forms` folder to a USB drive. **Crucial:** Ensure `node_modules` and `client/dist` are included.
+This guide provides step-by-step instructions to set up and run the Form Builder project on a new PC with **Node.js** and **PostgreSQL** already installed.
 
 ---
 
-### 🛠️ Phase 2: Offline PC Environment Setup
-*On the target offline computer.*
-
-1.  **Install Software:**
-    - Run the Node.js installer you downloaded.
-    - Run the PostgreSQL installer. Follow the prompts and **note down your password**.
-2.  **Create the Database:**
-    - Open **pgAdmin 4** (installed with PostgreSQL).
-    - Right-click "Databases" -> "Create" -> "Database...".
-    - Name it: `formbuilder`. Click **Save**.
-3.  **Configure Environment:**
-    - Open `22-2-forms/server/.env` in Notepad.
-    - Change `DB_USER` to `postgres` (default).
-    - Change `DB_PASSWORD` to the password you set during PostgreSQL installation.
-    - Ensure `PORT=5000`.
-
----
-
-### 🚀 Phase 3: The Exact Command Sequence
-*Open a terminal (Command Prompt or PowerShell) and navigate to the `server` folder.*
-
-#### **Step 1: Create Base Tables**
-```bash
-node db/migrate.js
+## 📂 1. Project Structure
+Ensure your project folder is organized as follows:
+```text
+22-2-forms/
+├── client/             # React Frontend (Vite)
+├── server/             # Node.js Backend (Express)
+├── .env                # Environment Variables (Root)
+└── README.md
 ```
-> **What to expect:** You should see `✓ users table`, `✓ forms table`, etc. ending with `✅ All migrations completed successfully!`.
 
-#### **Step 2: Create Collaborative & Learning Features**
-```bash
-node db/migrate-collateral.js
+---
+
+## 🗄️ 2. PostgreSQL Database Setup
+
+1.  Open **pgAdmin 4** or **psql** terminal.
+2.  Create a new database named `form_builder_db`:
+    ```sql
+    CREATE DATABASE form_builder_db;
+    ```
+3.  (Optional) Create a dedicated user:
+    ```sql
+    CREATE USER form_admin WITH PASSWORD 'your_secure_password';
+    GRANT ALL PRIVILEGES ON DATABASE form_builder_db TO form_admin;
+    ```
+
+---
+
+## ⚙️ 3. Environment Configuration
+
+Create a file named `.env` in the **root directory** and copy the following (update with your database credentials):
+
+```env
+# Database Configuration
+PGUSER=postgres
+PGHOST=localhost
+PGDATABASE=form_builder_db
+PGPASSWORD=your_postgres_password
+PGPORT=5432
+
+# Authentication
+JWT_SECRET=industry_level_secret_key_2026
+
+# Server Port
+PORT=5000
 ```
-> **What to expect:** You should see `✓ branches table` and `✓ seeded initial branches`. This enables the "learning" system.
 
-#### **Step 3: Seed University Data**
+---
+
+## 📦 4. Install Dependencies
+
+Open a terminal in the root project folder and run:
+
+### Server Dependencies
+```bash
+cd server
+npm install
+```
+
+### Client Dependencies
+```bash
+cd ../client
+npm install
+```
+
+---
+
+## 🚀 5. Database Migrations (Critical)
+
+To enable all "Industry-Level" features, you must run the migration scripts in the following order. Open a terminal in the `server` directory:
+
+1.  **Base Schema**: `node db/migrate.js`
+2.  **User Isolation**: `node db/add-user-isolation.js`
+3.  **Industry Scaling (Audit/Soft Delete)**: `node db/industry-upgrade.js`
+4.  **Notifications System**: `node db/add-notifications.js`
+5.  **Collaboration Features**: `node db/migrate-collateral.js`
+6.  **Organizational Groups (New Type)**: `node db/add-group-type.js`
+
+---
+
+## 🌱 6. Seed Initial Data
+
+To populate the University list and Group types, run:
 ```bash
 node db/seed.js
 ```
-> **What to expect:** You should see `Parsed X rows from Excel` and `✅ Seeded universities successfully!`. This populates the autocomplete.
-
-#### **Step 4: Start Server for Admin Registration**
-```bash
-node index.js
-```
-> **What to expect:** `🚀 Form Dashboard API running at: http://localhost:5000`.
-> **Action:** Leave this terminal open.
-
-#### **Step 5: Register the FIRST USER (The Admin)**
-1.  Open your web browser and go to: `http://localhost:5000/register`
-2.  Enter a username (e.g., `admin`) and a password.
-3.  Click **Register**.
-4.  **Important:** Once you are logged in, go back to the terminal and press **`Ctrl + C`** to stop the server.
-
-#### **Step 6: Enable User Isolation**
-*Now that an admin user exists, you must link the database structure.*
-```bash
-node db/add-user-isolation.js
-```
-> **What to expect:** `✅ User isolation setup completed successfully!`.
 
 ---
 
-### 🏃 Phase 4: Final Daily Usage
-From now on, whenever you want to use the app, just run:
-```bash
-cd server
-node index.js
-```
-*Access the system at `http://localhost:5000`.*
+## 🏃 7. Running the Project
+
+### Option A: Development Mode (Standard)
+Run both commands in separate terminal windows:
+
+*   **Terminal 1 (Server)**:
+    ```bash
+    cd server
+    npm run dev
+    ```
+*   **Terminal 2 (Client)**:
+    ```bash
+    cd client
+    npm run dev
+    ```
+    Access at: `http://localhost:5173`
+
+### Option B: Production / LAN Mode (Recommended for Offline Use)
+This allows other PCs on the same network to access the forms.
+
+1.  **Build the Frontend**:
+    ```bash
+    cd client
+    npm run build
+    ```
+2.  **Start the Server**:
+    ```bash
+    cd ../server
+    npm start
+    ```
+3.  **Find your Local IP**:
+    *   The server terminal will display: `Network: http://192.168.x.x:5000`
+4.  **Firewall Setup**:
+    *   Ensure Windows Firewall allows connections on Port `5000`.
 
 ---
 
-### 💡 Key Features Verified for this Setup:
-- **🎓 Smart Autocomplete:** Search for any university; it uses the seeded database.
-- **🧠 Learning System:** If you type a new university or branch name during submission, it is saved for future suggestions.
-- **🏠 Address Lookup:** States and Districts for India are automatically loaded from `server/data/india_states_districts.json`.
-- **👑 Admin Control:** As the first user, you can access `http://localhost:5000/admin` to see all system data and manage users.
-- **📊 Offline Exports:** The "Export Excel" button on the submissions page works entirely without an internet connection.
+## 👑 8. First User Registration
+The **first user** to register on the application is automatically granted the **Admin** role. 
+1.  Go to the Register page.
+2.  Create your account.
+3.  You will now have access to the **Admin Dashboard** tab at the top.
+
+---
+
+## 📝 9. Troubleshooting
+*   **Database Connection Refused**: Check if PostgreSQL service is running and credentials in `.env` match.
+*   **Export Fails**: Ensure the server has permission to write to its directory (though Excel is streamed directly).
+*   **Vite Errors**: Clear `node_modules` and run `npm install` again.

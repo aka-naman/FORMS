@@ -19,6 +19,7 @@ const FIELD_TYPES = [
     { value: 'duration', label: 'Duration', icon: '⏱️' },
     { value: 'university_autocomplete', label: 'University Autocomplete', icon: '🎓' },
     { value: 'residential_address', label: 'Residential Address', icon: '🏠' },
+    { value: 'zone_group', label: 'Group (Zone-based)', icon: '🏢' },
     { value: 'cgpa_converter', label: 'CGPA to Percentage', icon: '🧮' },
 ];
 

@@ -17,6 +17,7 @@ const exportRoutes = require('./routes/export');
 const autocompleteRoutes = require('./routes/autocomplete');
 const adminUserRoutes = require('./routes/admin-users');
 const permissionRoutes = require('./routes/permissions');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
@@ -36,6 +37,7 @@ app.use('/api/forms', fieldRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/autocomplete', autocompleteRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

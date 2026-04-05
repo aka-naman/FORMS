@@ -26,6 +26,7 @@ router.get('/', authenticate, async (req, res) => {
                 CASE
                     WHEN f.user_id = $1::int THEN 'owner'
                     WHEN $2 = true THEN 'admin'
+                    WHEN fp.status = 'ignored' THEN 'pending'
                     ELSE COALESCE(fp.status, 'none')
                 END as access_status
             FROM forms f
