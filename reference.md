@@ -49,3 +49,50 @@ If rebuilding the frontend doesn't work, we need to move from "restarting" to "A
 
 
 
+
+   1. The API URL (Most Likely)
+  Check your client/src/api/client.js. If it looks like this:
+
+   1 baseURL: 'http://localhost:5000/api'
+  It will fail. When you click "Login" on the other PC, the browser tries to
+  find the backend on itself (localhost), not on your server PC.
+
+  The Fix:
+  You should use relative paths so the browser automatically uses the IP
+  address in the URL bar:
+   1 // client/src/api/client.js
+   2 const api = axios.create({
+   3   baseURL: '/api', // This tells the browser: "Use the same IP/Domain
+     I'm currently on"
+   4 });
+
+  2. Windows Firewall
+  Even if you can "see" the login page (Port 5173 or 5000), Windows often
+  blocks the specific request that sends the login data.
+   * The Fix: On the Host PC, go to Windows Defender Firewall -> Advanced
+     Settings -> Inbound Rules.
+   * Create a New Rule for Port 5000 (and 5173 if using dev mode) and set it
+     to Allow the connection.
+
+  3. Backend Binding
+  The Node.js server must be listening on 0.0.0.0 (all interfaces), not just
+  127.0.0.1.
+   * Check server/index.js. It should look like this:
+   1     app.listen(PORT, '0.0.0.0', () => { ... });
+      (We already checked this in a previous turn, and it is correctly set
+  to 0.0.0.0).
+
+  4. How to Debug it right now
+  On the other PC (the one that can't log in):
+   1. Open the login page.
+   2. Press F12 to open Developer Tools.
+   3. Go to the Network tab.
+   4. Try to login.
+   5. Look for a red line (usually POST /login). Click it and look at the
+      Remote Address or Console error.
+       * If it says Connection Refused to localhost:5000, it's definitely
+         the API URL issue.
+       * If it says Timeout, it's the Firewall.
+
+
+
