@@ -167,7 +167,21 @@ Formula: (Obtained / Scale) * (Factor * Scale)
       
 
 
+Program flow
 
+  * Data Flow: The React frontend communicates via an Axios client (src/api/client.js) to the Express API, which uses a
+     PostgreSQL pool (server/db/pool.js) for persistence.
+   * Authentication: JWT-based with a First-User-Admin policy. Roles are enforced via middleware/auth.js and reflected
+     in the UI through ProtectedRoute and AdminRoute.
+   * Database Schema: A relational model that isolates forms by owner_id. It features an Audit History system for
+     tracking submission edits and a "learning" mechanism where autocomplete.js persists new entries from "Other" field
+     options (States, Districts, Zones, Universities).
+   * State Management: Optimized for React Fast Refresh using the Split Context pattern (Logic in .js, Provider in .jsx)
+     for Auth and Theme.
+   * Specialized Logic:
+       - Excel Export: Aggressively cleans internal ||| separators into ,  for professional reports.
+       - Permissions: A dual-notification workflow that alerts both form owners and all system admins for access
+         requests.
 
 
 
