@@ -3,6 +3,10 @@ import { useParams } from 'react-router-dom';
 import api from '../api/client';
 import AutocompleteInput from '../components/AutocompleteInput';
 
+// const CGPA_PRESETS = [
+//     { id: '10_scale', label: '10 Scale (9.5)', scale: 10, factor: 9.5 },
+//     { id: '4_scale', label: '4 Scale (3.8)', scale: 4, factor: 3.8 },
+//     { id: 'custom', label: 'Custom Rule', scale: 10, factor: 9.5 }
 const CGPA_PRESETS = [
     { id: '10_scale', label: '10 Scale (9.5)', scale: 10, factor: 9.5 },
     { id: '4_scale', label: '4 Scale (3.8)', scale: 4, factor: 3.8 },
@@ -183,6 +187,7 @@ export default function FormSubmitPage() {
                     if (!isNaN(obtained) && !isNaN(scale) && scale !== 0 && !isNaN(factor)) {
                         // Formula: (Obtained / Scale) * (Factor * Scale)
                         const result = (obtained / scale) * (factor * scale);
+                        // const result = (obtained / scale) * (factor);
                         // const result = (obtained * factor);
                         handleChange(field.id, `${result.toFixed(2)}% (CGPA: ${obtained}, Scale: ${scale}, Factor: ${factor})`);
                     } else {

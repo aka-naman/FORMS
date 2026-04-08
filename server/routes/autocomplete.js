@@ -7,18 +7,18 @@ const fs = require('fs');
 const path = require('path');
 
 // Cache for locations data
-let locationsData = null;
+let locationsDataCache = null;
+let lastCacheUpdate = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-const getLocations = () => {
-    if (locationsData) return locationsData;
+const getBaseLocations = () => {
     try {
         const filePath = path.join(__dirname, '..', 'data', 'india_states_districts.json');
         if (fs.existsSync(filePath)) {
-            locationsData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-            return locationsData;
+            return JSON.parse(fs.readFileSync(filePath, 'utf8'));
         }
     } catch (err) {
-        console.error('Error loading locations data:', err);
+        console.error('Error loading base locations data:', err);
     }
     return {};
 };
@@ -26,17 +26,28 @@ const getLocations = () => {
 // GET /api/autocomplete/locations
 router.get('/locations', authenticate, async (req, res) => {
     try {
+        const now = Date.now();
+        if (locationsDataCache && (now - lastCacheUpdate < CACHE_TTL)) {
+            return res.json(locationsDataCache);
+        }
+
         // Deep copy static data
-        const data = JSON.parse(JSON.stringify(getLocations()));
+        const data = JSON.parse(JSON.stringify(getBaseLocations()));
         
         // Fetch all learned locations from the universities table
-        const customResult = await pool.query('SELECT DISTINCT state, district FROM universities WHERE state IS NOT NULL AND district IS NOT NULL');
+        // Optimized query to only get unique pairs
+        const customResult = await pool.query(`
+            SELECT DISTINCT state, district 
+            FROM universities 
+            WHERE state IS NOT NULL AND district IS NOT NULL
+              AND state != '__other__' AND district != '__other__'
+        `);
         
         for (const row of customResult.rows) {
             const state = row.state.trim();
             const district = row.district.trim();
             
-            if (!state || !district || state === '__other__' || district === '__other__') continue;
+            if (!state || !district) continue;
             
             if (!data[state]) {
                 data[state] = [];
@@ -46,16 +57,15 @@ router.get('/locations', authenticate, async (req, res) => {
             }
         }
         
-        // Sort districts alphabetically
-        for (const state in data) {
-            data[state].sort();
-        }
-
-        // Return ordered state keys
+        // Sort districts alphabetically and build sorted object
         const sortedData = {};
-        Object.keys(data).sort().forEach(key => {
-            sortedData[key] = data[key];
+        Object.keys(data).sort().forEach(state => {
+            sortedData[state] = data[state].sort();
         });
+
+        // Update cache
+        locationsDataCache = sortedData;
+        lastCacheUpdate = now;
 
         res.json(sortedData);
     } catch (err) {
@@ -72,12 +82,7 @@ router.get('/university', authenticate, async (req, res) => {
             return res.json({ results: [] });
         }
 
-        // Advanced Search:
-        // 1. Regular name search (ILIKE)
-        // 2. Acronym search (if exists)
-        // 3. Dot-agnostic search (e.g., "PEC" matches "P.E.C." or "P E C")
-        
-        // Transform "PEC" to "P.*E.*C" for fuzzy regex matching
+        // Optimized fuzzy pattern: only extract alphanumeric characters
         const fuzzyPattern = q.split('').filter(c => /[a-zA-Z0-9]/.test(c)).join('.*');
 
         const result = await pool.query(
@@ -100,77 +105,8 @@ router.get('/university', authenticate, async (req, res) => {
 
         res.json({ results: result.rows });
     } catch (err) {
-        console.error('Autocomplete error:', err);
-        // Fallback to simple ILIKE if regex or similarity fails
-        try {
-           const fallback = await pool.query(
-               'SELECT name, state, district FROM universities WHERE name ILIKE $1 LIMIT 10',
-               [`%${q}%`]
-           );
-           return res.json({ results: fallback.rows });
-        } catch (e) {
-            res.status(500).json({ error: 'Autocomplete search failed' });
-        }
-    }
-});
-
-// POST /api/autocomplete/university/add
-router.post('/university/add', authenticate, async (req, res) => {
-    const { name, state, district } = req.body;
-    if (!name || !state || !district) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    try {
-        // Calculate acronym automatically (e.g., Punjab Engineering College -> PEC)
-        const acronym = name.split(/\s+/).filter(w => w.length > 0).map(word => word[0]).join('').toUpperCase();
-        
-        // 1. Check if it already exists (to avoid index issues)
-        const check = await pool.query('SELECT * FROM universities WHERE name = $1 LIMIT 1', [name]);
-        if (check.rows.length > 0) {
-            return res.json({ message: 'University already exists', university: check.rows[0] });
-        }
-
-        // 2. Insert new record
-        const result = await pool.query(
-            `INSERT INTO universities (name, state, district, is_custom, acronym)
-             VALUES ($1, $2, $3, true, $4)
-             RETURNING *`,
-            [name, state, district, acronym]
-        );
-        res.json({ message: 'University added successfully', university: result.rows[0] });
-    } catch (err) {
-        console.error('Add university error:', err);
-        res.status(500).json({ error: 'Failed to add university' });
-    }
-});
-
-// GET /api/autocomplete/branches
-router.get('/branches', authenticate, async (req, res) => {
-    try {
-        const result = await pool.query('SELECT name FROM branches ORDER BY name ASC');
-        res.json({ results: result.rows.map(r => r.name) });
-    } catch (err) {
-        console.error('Branches fetch error:', err);
-        res.status(500).json({ error: 'Failed to fetch branches' });
-    }
-});
-
-// GET /api/autocomplete/groups — Grouped by Zone
-router.get('/groups', authenticate, async (req, res) => {
-    try {
-        const result = await pool.query('SELECT zone, group_name FROM organizational_groups ORDER BY zone ASC, group_name ASC');
-        const data = {};
-        
-        result.rows.forEach(row => {
-            if (!data[row.zone]) data[row.zone] = [];
-            data[row.zone].push(row.group_name);
-        });
-
-        res.json(data);
-    } catch (err) {
-        console.error('Groups fetch error:', err);
-        res.status(500).json({ error: 'Failed to fetch groups' });
+        console.error('University autocomplete error:', err);
+        res.status(500).json({ error: 'Failed to fetch universities' });
     }
 });
 

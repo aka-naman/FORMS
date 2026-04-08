@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import api from '../api/client';
 
 export default function SubmissionsPage() {
@@ -21,7 +23,7 @@ export default function SubmissionsPage() {
     const [savingEdit, setSavingEdit] = useState(false);
 
     // Audit State
-    const [auditLog, setAuditLog] = useState(null); // { submissionId, entries: [] }
+    const [auditLog, setAuditLog] = useState(null);
 
     const load = useCallback(async (pageNum = 1, search = '') => {
         setLoading(true);
@@ -31,7 +33,6 @@ export default function SubmissionsPage() {
             setSubmissions(res.data.submissions);
             setPagination(res.data.pagination);
             
-            // Get form name if not already set
             if (!formName) {
                 const formsRes = await api.get('/forms');
                 const form = formsRes.data.forms.find(f => f.id === parseInt(formId));
@@ -110,7 +111,7 @@ export default function SubmissionsPage() {
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${formName.replace(/[^a-zA-Z0-9]/g, '_')}_submissions.xlsx`;
+            link.download = `export_${formId}.xlsx`;
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -118,6 +119,41 @@ export default function SubmissionsPage() {
         } catch {
             alert('Export failed');
         }
+    };
+
+    // Horizontal Scroll Sync
+    const headerRef = useMemo(() => ({ current: null }), []);
+    const onScroll = ({ scrollLeft }) => {
+        if (headerRef.current) {
+            headerRef.current.scrollLeft = scrollLeft;
+        }
+    };
+
+    // Virtualized Row Component
+    const Row = ({ index, style }) => {
+        const sub = submissions[index];
+        return (
+            <div style={style} className="table-row">
+                <div className="table-cell sticky-col first-col">
+                    <div className="action-group">
+                        <button className="btn btn-icon btn-sm" onClick={() => handleEditClick(sub)} title="Edit">✏️</button>
+                        <button className="btn btn-icon btn-sm btn-danger-icon" onClick={() => handleDelete(sub.id)} title="Delete">🗑️</button>
+                    </div>
+                </div>
+                <div className="table-cell">{sub.id}</div>
+                <div className="table-cell">{new Date(sub.submitted_at).toLocaleString()}</div>
+                {fields.map(f => (
+                    <div key={f.id} className="table-cell">{getFieldValue(sub, f.id)}</div>
+                ))}
+                <div className="table-cell">
+                    {sub.updated_at ? (
+                        <button className="btn btn-ghost btn-sm" onClick={() => fetchAudit(sub.id)}>
+                            🕒 History ({sub.updated_by_username})
+                        </button>
+                    ) : '-'}
+                </div>
+            </div>
+        );
     };
 
     return (
@@ -133,7 +169,7 @@ export default function SubmissionsPage() {
                         <input 
                             type="text" 
                             className="search-input" 
-                            placeholder="🔍 Server-side search (any value)..." 
+                            placeholder="🔍 Server-side search..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -152,40 +188,31 @@ export default function SubmissionsPage() {
                 <div className="empty-state glass-card"><h2>No entries found</h2></div>
             ) : (
                 <>
-                    <div className="table-container glass-card">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th className="sticky-col first-col">Actions</th>
-                                    <th>ID</th>
-                                    <th>Submitted At</th>
-                                    {fields.map(f => <th key={f.id}>{f.label}</th>)}
-                                    <th>Edit Logs</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {submissions.map((sub) => (
-                                    <tr key={sub.id}>
-                                        <td className="sticky-col first-col">
-                                            <div className="action-group">
-                                                <button className="btn btn-icon btn-sm" onClick={() => handleEditClick(sub)} title="Edit">✏️</button>
-                                                <button className="btn btn-icon btn-sm btn-danger-icon" onClick={() => handleDelete(sub.id)} title="Delete">🗑️</button>
-                                            </div>
-                                        </td>
-                                        <td>{sub.id}</td>
-                                        <td>{new Date(sub.submitted_at).toLocaleString()}</td>
-                                        {fields.map(f => <td key={f.id}>{getFieldValue(sub, f.id)}</td>)}
-                                        <td>
-                                            {sub.updated_at ? (
-                                                <button className="btn btn-ghost btn-sm" onClick={() => fetchAudit(sub.id)}>
-                                                    🕒 History ({sub.updated_by_username})
-                                                </button>
-                                            ) : '-'}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="table-container virtualized-table-container glass-card">
+                        <div className="virtualized-table">
+                            <div className="table-header" ref={headerRef}>
+                                <div className="table-cell sticky-col first-col">Actions</div>
+                                <div className="table-cell">ID</div>
+                                <div className="table-cell">Submitted At</div>
+                                {fields.map(f => <div key={f.id} className="table-cell">{f.label}</div>)}
+                                <div className="table-cell">Edit Logs</div>
+                            </div>
+                            <div className="table-body">
+                                <AutoSizer>
+                                    {({ height, width }) => (
+                                        <List
+                                            height={height}
+                                            itemCount={submissions.length}
+                                            itemSize={60}
+                                            width={width}
+                                            onScroll={onScroll}
+                                        >
+                                            {Row}
+                                        </List>
+                                    )}
+                                </AutoSizer>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="pagination-controls">
@@ -196,13 +223,12 @@ export default function SubmissionsPage() {
                 </>
             )}
 
-            {/* Edit Modal remains similar but with sticky layout fixed previously */}
+            {/* Modals remain same */}
             {editingSubmission && (
                 <div className="modal-overlay" onClick={() => setEditingSubmission(null)}>
                     <div className="modal glass-card modal-fixed-height" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h2>✏️ Edit Response #{editingSubmission.id}</h2>
-                            <p className="modal-subtitle">Directly modifying entry data</p>
                         </div>
                         <div className="modal-body scrollable-content">
                             {fields.map(f => (
@@ -226,39 +252,33 @@ export default function SubmissionsPage() {
                     </div>
                 </div>
             )}
-            {/* Audit Modal */}
             {auditLog && (
                 <div className="modal-overlay" onClick={() => setAuditLog(null)}>
                     <div className="modal glass-card modal-fixed-height audit-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h2>🕒 History for Response #{auditLog.submissionId}</h2>
-                            <p className="modal-subtitle">Showing all previous versions before edits</p>
                         </div>
                         <div className="modal-body scrollable-content">
-                            {auditLog.entries.length === 0 ? (
-                                <p>No audit entries found.</p>
-                            ) : (
-                                <div className="audit-timeline">
-                                    {auditLog.entries.map((entry, idx) => (
-                                        <div key={entry.id} className="audit-entry glass-card">
-                                            <div className="audit-entry-header">
-                                                <span className="audit-badge">Snapshot #{auditLog.entries.length - idx}</span>
-                                                <span className="audit-meta">
-                                                    Changed by <strong>{entry.changed_by_username}</strong> on {new Date(entry.changed_at).toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <div className="audit-values">
-                                                {fields.map(f => (
-                                                    <div key={f.id} className="audit-value-item">
-                                                        <span className="audit-label">{f.label}:</span>
-                                                        <span className="audit-value">{entry.old_values_json[f.id] || '(empty)'}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
+                            <div className="audit-timeline">
+                                {auditLog.entries.map((entry, idx) => (
+                                    <div key={entry.id} className="audit-entry glass-card">
+                                        <div className="audit-entry-header">
+                                            <span className="audit-badge">Snapshot #{auditLog.entries.length - idx}</span>
+                                            <span className="audit-meta">
+                                                Changed by <strong>{entry.changed_by_username}</strong> on {new Date(entry.changed_at).toLocaleString()}
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                        <div className="audit-values">
+                                            {fields.map(f => (
+                                                <div key={f.id} className="audit-value-item">
+                                                    <span className="audit-label">{f.label}:</span>
+                                                    <span className="audit-value">{entry.old_values_json[f.id] || '(empty)'}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                         <div className="modal-actions-sticky">
                             <button className="btn btn-primary" onClick={() => setAuditLog(null)}>Close History</button>

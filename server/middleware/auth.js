@@ -30,33 +30,30 @@ function requireAdmin(req, res, next) {
 
 /**
  * Check if user has access to a form (owner, admin, or approved collaborator)
+ * Optimized for single query execution.
  */
 const checkFormAccess = async (formId, userId, userRole) => {
-    const formResult = await pool.query(
-        `SELECT f.*, u.role as owner_role 
-         FROM forms f 
-         JOIN users u ON f.user_id = u.id 
-         WHERE f.id = $1`, 
-        [formId]
-    );
-    if (formResult.rows.length === 0) return { exists: false, hasAccess: false };
-    
-    const form = formResult.rows[0];
-    const isOwner = Number(form.user_id) === Number(userId);
     const isAdmin = userRole === 'admin';
-
-    if (isAdmin || isOwner) {
-        return { exists: true, hasAccess: true, isOwner, isAdmin, form };
-    }
-
-    // Check collaborator approval (now allowed even for admin-owned forms)
-    const permResult = await pool.query(
-        'SELECT status FROM form_permissions WHERE form_id = $1 AND user_id = $2 AND status = $3',
-        [formId, Number(userId), 'approved']
-    );
     
-    if (permResult.rows.length > 0) {
-        return { exists: true, hasAccess: true, isOwner: false, isAdmin: false, form };
+    // Single query to check form ownership and permissions
+    const query = `
+        SELECT f.*, u.role as owner_role,
+        (SELECT status FROM form_permissions WHERE form_id = f.id AND user_id = $2 LIMIT 1) as permission_status
+        FROM forms f 
+        JOIN users u ON f.user_id = u.id 
+        WHERE f.id = $1
+    `;
+    
+    const result = await pool.query(query, [formId, Number(userId)]);
+    if (result.rows.length === 0) return { exists: false, hasAccess: false };
+    
+    const form = result.rows[0];
+    const isOwner = Number(form.user_id) === Number(userId);
+    const hasPermission = form.permission_status === 'approved';
+
+    // Access granted if Admin, Owner, or Approved Collaborator
+    if (isAdmin || isOwner || hasPermission) {
+        return { exists: true, hasAccess: true, isOwner, isAdmin, form };
     }
 
     // STRICT RULE: If form is owned by an admin, only admins (or approved collaborators) can access it
