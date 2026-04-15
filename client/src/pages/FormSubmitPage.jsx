@@ -4,9 +4,10 @@ import api from '../api/client';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 const CGPA_PRESETS = [
-    { id: '10_scale', label: '10 Scale (9.5)', scale: 10, factor: 9.5 },
-    { id: '4_scale', label: '4 Scale (3.8)', scale: 4, factor: 3.8 },
-    { id: 'custom', label: 'Custom Rule', scale: 10, factor: 9.5 }
+    { id: '10', label: '10 Scale', scale: 10 },
+    { id: '7', label: '7 Scale', scale: 7 },
+    { id: '4', label: '4 Scale', scale: 4 },
+    { id: 'other', label: 'Other Scale', scale: '' }
 ];
 
 export default function FormSubmitPage() {
@@ -62,7 +63,13 @@ export default function FormSubmitPage() {
                     initialValues[f.id] = '';
                     if (f.type === 'checkboxes' || f.type === 'multiple_choice') initialCheckboxes[f.id] = [];
                     if (f.type === 'cgpa_converter') {
-                        initialOthers[f.id] = { cgpa: '', presetId: '10_scale', scale: 10, factor: 9.5 };
+                        initialOthers[f.id] = { 
+                            cgpa: '', 
+                            presetId: '10', 
+                            scale: 10, 
+                            factorType: 'auto', 
+                            factor: 9.5 
+                        };
                     }
                 });
                 setValues(initialValues);
@@ -162,29 +169,37 @@ export default function FormSubmitPage() {
 
         switch (field.type) {
             case 'cgpa_converter': {
-                const data = otherValues[field.id] || { cgpa: '', presetId: '10_scale', scale: 10, factor: 9.5 };
+                const data = otherValues[field.id] || { 
+                    cgpa: '', 
+                    presetId: '10', 
+                    scale: 10, 
+                    factorType: 'auto', 
+                    factor: 9.5 
+                };
                 
                 const updateCgpa = (updates) => {
                     const next = { ...data, ...updates };
                     
-                    // Handle preset changes
-                    if (updates.presetId && updates.presetId !== 'custom') {
+                    // 1. Handle Max CGPA changes
+                    if ('presetId' in updates) {
                         const preset = CGPA_PRESETS.find(p => p.id === updates.presetId);
                         next.scale = preset.scale;
-                        next.factor = preset.factor;
+                    }
+
+                    // 2. Handle Conversion Factor logic
+                    const scaleNum = parseFloat(next.scale);
+                    if (next.factorType === 'auto' && !isNaN(scaleNum) && scaleNum !== 0) {
+                        next.factor = (95 / scaleNum).toFixed(4);
                     }
 
                     setOtherValues(p => ({ ...p, [field.id]: next }));
                     
                     const obtained = parseFloat(next.cgpa);
-                    const scale = parseFloat(next.scale);
                     const factor = parseFloat(next.factor);
 
-                    if (!isNaN(obtained) && !isNaN(scale) && scale !== 0 && !isNaN(factor)) {
-                        // Formula: (Obtained / Scale) * (Factor * Scale)
-                        const result = (obtained / scale) * (factor * scale);
-                        // const result = (obtained * factor);
-                        handleChange(field.id, `${result.toFixed(2)}% (CGPA: ${obtained}, Scale: ${scale}, Factor: ${factor})`);
+                    if (!isNaN(obtained) && !isNaN(factor)) {
+                        const result = obtained * factor;
+                        handleChange(field.id, `${result.toFixed(2)}% (CGPA: ${obtained}, Scale: ${next.scale}, Factor: ${factor})`);
                     } else {
                         handleChange(field.id, '');
                     }
@@ -195,35 +210,66 @@ export default function FormSubmitPage() {
                         <div className="field-row">
                             <div className="flex-1">
                                 <label className="sub-label">Obtained CGPA</label>
-                                <input type="number" className="form-input" placeholder="e.g. 8.5" value={data.cgpa} onChange={(e) => updateCgpa({ cgpa: e.target.value })} step="0.01" />
+                                <input 
+                                    type="number" 
+                                    className="form-input" 
+                                    placeholder="e.g. 8.5" 
+                                    value={data.cgpa} 
+                                    onChange={(e) => updateCgpa({ cgpa: e.target.value })} 
+                                    step="0.01" 
+                                />
                             </div>
                             <div className="flex-1">
-                                <label className="sub-label">Standard Rule</label>
-                                <select className="form-input" value={data.presetId} onChange={(e) => updateCgpa({ presetId: e.target.value })}>
+                                <label className="sub-label">Max CGPA</label>
+                                <select 
+                                    className="form-input" 
+                                    value={data.presetId} 
+                                    onChange={(e) => updateCgpa({ presetId: e.target.value })}
+                                >
                                     {CGPA_PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                                 </select>
                             </div>
                         </div>
+
                         <div className="field-row">
-                            <div className="flex-1">
-                                <label className="sub-label">CGPA Grading Scale</label>
-                                <input 
-                                    type="number" 
-                                    className="form-input" 
-                                    value={data.scale} 
-                                    onChange={(e) => updateCgpa({ scale: e.target.value, presetId: 'custom' })} 
-                                />
-                            </div>
+                            {data.presetId === 'other' && (
+                                <div className="flex-1">
+                                    <label className="sub-label">Custom Max CGPA</label>
+                                    <input 
+                                        type="number" 
+                                        className="form-input" 
+                                        placeholder="e.g. 5"
+                                        value={data.scale} 
+                                        onChange={(e) => updateCgpa({ scale: e.target.value })} 
+                                    />
+                                </div>
+                            )}
                             <div className="flex-1">
                                 <label className="sub-label">Conversion Factor</label>
-                                <input 
-                                    type="number" 
+                                <select 
                                     className="form-input" 
-                                    value={data.factor} 
-                                    onChange={(e) => updateCgpa({ factor: e.target.value, presetId: 'custom' })} 
-                                />
+                                    value={data.factorType}
+                                    onChange={(e) => updateCgpa({ factorType: e.target.value })}
+                                >
+                                    <option value="auto">Auto ({(!isNaN(parseFloat(data.scale)) && parseFloat(data.scale) !== 0) ? (95 / parseFloat(data.scale)).toFixed(2) : '?'})</option>
+                                    <option value="manual">Other (Manual)</option>
+                                </select>
                             </div>
+                            {data.factorType === 'manual' && (
+                                <div className="flex-1">
+                                    <label className="sub-label">Manual Factor</label>
+                                    <input 
+                                        type="number" 
+                                        className="form-input" 
+                                        placeholder="e.g. 10"
+                                        value={data.factor} 
+                                        onChange={(e) => updateCgpa({ factor: e.target.value })} 
+                                        step="0.0001"
+                                    />
+                                </div>
+                            )}
                         </div>
+
                         {val && (
                             <div className="cgpa-result">
                                 Calculated Percentage: <strong>{val.split('%')[0]}%</strong>
