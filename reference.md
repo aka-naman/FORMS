@@ -49,3 +49,26 @@ If rebuilding the frontend doesn't work, we need to move from "restarting" to "A
 
 
 
+
+
+
+
+
+
+
+
+
+  The GEMINI.md file has been updated with a new section documenting the Universal Intelligent Data Explorer implementation. This includes:
+
+   * Offline AI Engine: Integration of node-llama-cpp (v3) with the Phi-3 Mini model for 100% local, secure inference.
+   * Hybrid Intent Architecture: High-precision Text-to-JSON parsing with strict schema enforcement, followed by deterministic SQL generation.
+   * Mathematical Intelligence: Advanced numeric extraction (using PostgreSQL regex) to handle comparisons like > 8 on text-based submissions.
+   * Semantic Mapping: Automatic field aliasing across multiple forms.
+   * Explorer UI: A new, dedicated interface for natural language querying and instant Excel exports.
+   * System Stability: Optimized memory management with explicit sequence disposal to handle continuous queries.
+
+  Your project context is now fully updated and ready for future sessions!
+
+
+
+
